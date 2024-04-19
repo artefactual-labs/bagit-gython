@@ -20,7 +20,7 @@ func main() {
 	}
 
 	var validate string
-	flag.StringVar(&validate, "", "", "path of bag to validate")
+	flag.StringVar(&validate, "validate", "", "path of bag to validate")
 	flag.Parse()
 
 	if validate == "" {
