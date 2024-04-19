@@ -1,0 +1,96 @@
+{
+  "contentHash": "b070e1f8e1eb39e729a92e1a6defde8dc8f537428fab7c5606fb88412d0b75c8",
+  "files": [
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 2147484157
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/INSTALLER",
+      "size": 4,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/METADATA",
+      "size": 8167,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/RECORD",
+      "size": 994,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/REQUESTED",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/WHEEL",
+      "size": 110,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/direct_url.json",
+      "size": 211,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/top_level.txt",
+      "size": 6,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bagit.py",
+      "size": 55530,
+      "modTime": 1713519596,
+      "perm": 436
+    },
+    {
+      "name": "bin",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 2147484157
+    },
+    {
+      "name": "bin/bagit.py",
+      "size": 55551,
+      "modTime": 1713519596,
+      "perm": 509
+    },
+    {
+      "name": "locale",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 2147484157
+    },
+    {
+      "name": "locale/en",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 2147484157
+    },
+    {
+      "name": "locale/en/LC_MESSAGES",
+      "size": 0,
+      "modTime": 1713519596,
+      "perm": 2147484157
+    },
+    {
+      "name": "locale/en/LC_MESSAGES/bagit-python.mo",
+      "size": 2808,
+      "modTime": 1713519596,
+      "perm": 436,
+      "compressed": true
+    }
+  ]
+}
