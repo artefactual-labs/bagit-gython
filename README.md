@@ -9,6 +9,19 @@ It depends on [go-embed-python], a CGO-free library that provides an embedded
 distribution of Python compatible with a number of architecture and operative
 systems.
 
+## Installing
+
+Using bagit-python is easy. First, use `go get` to install the latest version
+of the library.
+
+    go get -u github.com/artefactual-labs/bagit-gython
+
+Next, include bagit-gython in your application:
+
+```go
+import "github.com/artefactual-labs/bagit-gython"
+```
+
 ## Usage
 
 Check out [`example`], a small program that imports bagit-python to validate a
