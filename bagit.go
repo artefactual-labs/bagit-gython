@@ -54,7 +54,10 @@ func (b *BagIt) Validate(path string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	cmd := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
+	cmd, err := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
+	if err != nil {
+		return fmt.Errorf("create command: %v", err)
+	}
 	cmd.Stderr = os.Stderr
 
 	stdout, err := cmd.StdoutPipe()
