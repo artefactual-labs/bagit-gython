@@ -7,6 +7,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"gotest.tools/v3/assert"
+	"gotest.tools/v3/fs"
 )
 
 func TestValidateBag(t *testing.T) {
@@ -56,5 +57,40 @@ func TestValidateBag(t *testing.T) {
 
 		err = g.Wait()
 		assert.NilError(t, err)
+	})
+
+	t.Run("Creates bag", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := fs.NewDir(t, "", fs.WithFile("test.txt", "abcd"))
+
+		b, err := bagit.NewBagIt()
+		assert.NilError(t, err)
+		t.Cleanup(func() { b.Cleanup() })
+
+		err = b.Make(tmpDir.Path())
+		assert.NilError(t, err)
+
+		assert.Assert(t, fs.Equal(tmpDir.Path(), fs.Expected(t,
+			fs.WithDir("data", fs.WithFile("test.txt", "abcd"), fs.MatchAnyFileMode),
+			fs.WithFile("bagit.txt", `BagIt-Version: 0.97
+Tag-File-Character-Encoding: UTF-8
+`, fs.MatchAnyFileMode),
+			fs.WithFile("bag-info.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),
+			fs.WithFile("manifest-sha256.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),
+			fs.WithFile("manifest-sha512.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),
+			fs.WithFile("tagmanifest-sha256.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),
+			fs.WithFile("tagmanifest-sha512.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),
+		)))
+	})
+
+	t.Run("Reports creation failures", func(t *testing.T) {
+		t.Parallel()
+
+		b, err := bagit.NewBagIt()
+		assert.NilError(t, err)
+
+		err = b.Make("non-existent-dir")
+		assert.ErrorContains(t, err, "does not exist")
 	})
 }

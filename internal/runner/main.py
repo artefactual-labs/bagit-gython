@@ -2,7 +2,7 @@ import json
 import multiprocessing
 import sys
 
-from bagit import Bag
+from bagit import Bag, make_bag
 from bagit import BagError
 
 
@@ -24,12 +24,12 @@ class Runner:
         try:
             if self.cmd == "validate":
                 resp = self.validate(self.opts)
+            elif self.cmd == "make":
+                resp = self.make(self.opts)
             else:
                 raise Exception("Unknown command")
         except BaseException as err:
             resp["err"] = str(err)
-        else:
-            resp["OK"] = True
 
         return json.dumps(resp)
 
@@ -37,6 +37,11 @@ class Runner:
         bag = Bag(opts.get("path"))
         bag.validate(processes=multiprocessing.cpu_count())
         return {"valid": True}
+
+    def make(self, opts):
+        bag_dir = opts.pop("path")
+        bag = make_bag(bag_dir, **opts)
+        return {"version": bag.version}
 
 
 def main():
