@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/artefactual-labs/bagit-gython/internal/dist/data"
 	"github.com/artefactual-labs/bagit-gython/internal/runner"
@@ -17,32 +16,41 @@ import (
 	"github.com/kluctl/go-embed-python/python"
 )
 
+// BagIt is an abstraction to work with BagIt packages that embeds Python and
+// the bagit-python.
 type BagIt struct {
-	ep     *python.EmbeddedPython
-	lib    *embed_util.EmbeddedFiles
-	runner *embed_util.EmbeddedFiles
-	mu     sync.Mutex
+	tmpDir string                    // Top-level container for embedded files.
+	ep     *python.EmbeddedPython    // Python files.
+	lib    *embed_util.EmbeddedFiles // bagit-python library files.
+	runner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
 }
 
+// NewBagIt creates and initializes a new BagIt instance. This constructor is
+// computationally expensive as it sets up an embedded Python environment and
+// extracts necessary libraries. It's recommended to create a single instance
+// and share it across your application to avoid repeatedly installing Python.
 func NewBagIt() (*BagIt, error) {
 	b := &BagIt{}
 
-	tmpDir := filepath.Join(os.TempDir(), "python")
-	tmpDir = filepath.Join(tmpDir, "bagit")
+	var err error
+	b.tmpDir, err = os.MkdirTemp("", "bagit-gython-*")
+	if err != nil {
+		return nil, fmt.Errorf("make tmpDir: %v", err)
+	}
 
-	ep, err := python.NewEmbeddedPythonWithTmpDir(tmpDir, true)
+	ep, err := python.NewEmbeddedPythonWithTmpDir(filepath.Join(b.tmpDir, "python"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed python: %v", err)
 	}
 	b.ep = ep
 
-	b.lib, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, tmpDir+"-bagit-lib", true)
+	b.lib, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(b.tmpDir, "bagit-lib"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed bagit: %v", err)
 	}
 	b.ep.AddPythonPath(b.lib.GetExtractedPath())
 
-	b.runner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, tmpDir+"-runner", true)
+	b.runner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(b.tmpDir, "bagit-runner"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed runner: %v", err)
 	}
@@ -51,9 +59,6 @@ func NewBagIt() (*BagIt, error) {
 }
 
 func (b *BagIt) Validate(path string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	cmd, err := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
 	if err != nil {
 		return fmt.Errorf("create command: %v", err)
@@ -134,16 +139,20 @@ func (b *BagIt) Validate(path string) error {
 func (b *BagIt) Cleanup() error {
 	var e error
 
-	if err := b.ep.Cleanup(); err != nil {
-		e = errors.Join(e, fmt.Errorf("clean up python: %v", err))
+	if err := b.runner.Cleanup(); err != nil {
+		e = errors.Join(e, fmt.Errorf("clean up runner: %v", err))
 	}
 
 	if err := b.lib.Cleanup(); err != nil {
 		e = errors.Join(e, fmt.Errorf("clean up bagit: %v", err))
 	}
 
-	if err := b.runner.Cleanup(); err != nil {
-		e = errors.Join(e, fmt.Errorf("clean up runner: %v", err))
+	if err := b.ep.Cleanup(); err != nil {
+		e = errors.Join(e, fmt.Errorf("clean up python: %v", err))
+	}
+
+	if err := os.RemoveAll(b.tmpDir); err != nil {
+		e = errors.Join(e, fmt.Errorf("clean up tmpDir: %v", err))
 	}
 
 	return e
