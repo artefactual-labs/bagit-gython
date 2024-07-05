@@ -88,21 +88,13 @@ func (b *BagIt) Validate(path string) error {
 
 	reader := bufio.NewReader(stdout)
 
-	args := args{
+	if err := b.sendCommand(stdin, args{
 		Cmd: "validate",
 		Opts: &opts{
 			Path: path,
 		},
-	}
-	blob, err := json.Marshal(args)
-	if err != nil {
-		return fmt.Errorf("encode args: %v", err)
-	}
-	blob = append(blob, '\n')
-
-	_, err = stdin.Write(blob)
-	if err != nil {
-		return fmt.Errorf("write blob: %v", err)
+	}); err != nil {
+		return err
 	}
 
 	line := bytes.NewBuffer(nil)
@@ -135,6 +127,21 @@ func (b *BagIt) Validate(path string) error {
 	}
 	if !r.Valid {
 		return fmt.Errorf("invalid: %s", r.Err)
+	}
+
+	return nil
+}
+
+func (b *BagIt) sendCommand(stdin io.Writer, args args) error {
+	blob, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Errorf("encode args: %v", err)
+	}
+	blob = append(blob, '\n')
+
+	_, err = stdin.Write(blob)
+	if err != nil {
+		return fmt.Errorf("write blob: %v", err)
 	}
 
 	return nil
