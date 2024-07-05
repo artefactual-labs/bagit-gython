@@ -67,7 +67,6 @@ func (b *BagIt) create() (_ *runnerInstance, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("create command: %v", err)
 	}
-	cmd.Stderr = os.Stderr
 	i.cmd = cmd
 
 	stdin, err := cmd.StdinPipe()
