@@ -10,41 +10,44 @@ import (
 	"gotest.tools/v3/fs"
 )
 
+func setUp(t *testing.T) *bagit.BagIt {
+	t.Helper()
+
+	b, err := bagit.NewBagIt()
+	assert.NilError(t, err)
+
+	t.Cleanup(func() {
+		assert.NilError(t, b.Cleanup())
+	})
+
+	return b
+}
+
 func TestValidateBag(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Fails validation", func(t *testing.T) {
 		t.Parallel()
 
-		b, err := bagit.NewBagIt()
-		assert.NilError(t, err)
+		b := setUp(t)
 
-		err = b.Validate("/tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333")
+		err := b.Validate("/tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333")
 		assert.Error(t, err, "invalid: Expected bagit.txt does not exist: /tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333/bagit.txt")
-
-		err = b.Cleanup()
-		assert.NilError(t, err)
 	})
 
 	t.Run("Validates bag", func(t *testing.T) {
 		t.Parallel()
 
-		b, err := bagit.NewBagIt()
-		assert.NilError(t, err)
+		b := setUp(t)
 
-		err = b.Validate("internal/testdata/valid-bag")
-		assert.NilError(t, err)
-
-		err = b.Cleanup()
+		err := b.Validate("internal/testdata/valid-bag")
 		assert.NilError(t, err)
 	})
 
 	t.Run("Validates bag concurrently", func(t *testing.T) {
 		t.Parallel()
 
-		b, err := bagit.NewBagIt()
-		assert.NilError(t, err)
-		t.Cleanup(func() { b.Cleanup() })
+		b := setUp(t)
 
 		// This test should pass because each call to Validate() creates its own
 		// distinct Python interpreter instance.
@@ -55,7 +58,7 @@ func TestValidateBag(t *testing.T) {
 			})
 		}
 
-		err = g.Wait()
+		err := g.Wait()
 		assert.NilError(t, err)
 	})
 
@@ -64,11 +67,9 @@ func TestValidateBag(t *testing.T) {
 
 		tmpDir := fs.NewDir(t, "", fs.WithFile("test.txt", "abcd"))
 
-		b, err := bagit.NewBagIt()
-		assert.NilError(t, err)
-		t.Cleanup(func() { b.Cleanup() })
+		b := setUp(t)
 
-		err = b.Make(tmpDir.Path())
+		err := b.Make(tmpDir.Path())
 		assert.NilError(t, err)
 
 		assert.Assert(t, fs.Equal(tmpDir.Path(), fs.Expected(t,
@@ -87,10 +88,9 @@ Tag-File-Character-Encoding: UTF-8
 	t.Run("Reports creation failures", func(t *testing.T) {
 		t.Parallel()
 
-		b, err := bagit.NewBagIt()
-		assert.NilError(t, err)
+		b := setUp(t)
 
-		err = b.Make("non-existent-dir")
+		err := b.Make("non-existent-dir")
 		assert.ErrorContains(t, err, "does not exist")
 	})
 }
