@@ -81,6 +81,10 @@ func (b *BagIt) Validate(path string) error {
 	if err != nil {
 		return fmt.Errorf("cmd: %v", err)
 	}
+	defer func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
 
 	reader := bufio.NewReader(stdout)
 
