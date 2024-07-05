@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/artefactual-labs/bagit-gython/internal/dist/data"
@@ -58,39 +59,57 @@ func NewBagIt() (*BagIt, error) {
 	return b, nil
 }
 
-func (b *BagIt) Validate(path string) error {
+// create a Python intepreter running the bagit-python wrapper.
+func (b *BagIt) create() (_ *runnerInstance, err error) {
+	i := &runnerInstance{}
+
 	cmd, err := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
 	if err != nil {
-		return fmt.Errorf("create command: %v", err)
+		return nil, fmt.Errorf("create command: %v", err)
 	}
 	cmd.Stderr = os.Stderr
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("create stdout pipe: %v", err)
-	}
-	defer stdout.Close()
+	i.cmd = cmd
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("create stdin pipe: %v", err)
+		return nil, fmt.Errorf("create stdin pipe: %v", err)
 	}
-	defer stdin.Close()
+	i.stdin = stdin
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("create stdout pipe: %v", err)
+	}
+	i.stdout = stdout
 
 	err = cmd.Start()
 	if err != nil {
-		return fmt.Errorf("cmd: %v", err)
+		return nil, fmt.Errorf("cmd: %v", err)
 	}
-	defer func() {
-		cmd.Process.Kill()
-		cmd.Wait()
-	}()
 
-	reader := bufio.NewReader(stdout)
+	return i, nil
+}
 
-	if err := b.sendCommand(stdin, args{
+type validateRequest struct {
+	Path string `json:"path"`
+}
+
+type validateResponse struct {
+	Valid bool   `json:"valid"`
+	Err   string `json:"err"`
+}
+
+func (b *BagIt) Validate(path string) error {
+	i, err := b.create()
+	if err != nil {
+		return fmt.Errorf("run python: %v", err)
+	}
+
+	reader := bufio.NewReader(i.stdout)
+
+	if err := i.send(args{
 		Cmd: "validate",
-		Opts: &opts{
+		Opts: &validateRequest{
 			Path: path,
 		},
 	}); err != nil {
@@ -113,11 +132,7 @@ func (b *BagIt) Validate(path string) error {
 		return fmt.Errorf("response not received")
 	}
 
-	type resp struct {
-		Valid bool   `json:"valid"`
-		Err   string `json:"err"`
-	}
-	r := resp{}
+	r := validateResponse{}
 	err = json.Unmarshal(line.Bytes(), &r)
 	if err != nil {
 		return fmt.Errorf("decode response: %v", err)
@@ -132,16 +147,55 @@ func (b *BagIt) Validate(path string) error {
 	return nil
 }
 
-func (b *BagIt) sendCommand(stdin io.Writer, args args) error {
-	blob, err := json.Marshal(args)
-	if err != nil {
-		return fmt.Errorf("encode args: %v", err)
-	}
-	blob = append(blob, '\n')
+type makeRequest struct {
+	Path string `json:"path"`
+}
 
-	_, err = stdin.Write(blob)
+type makeResponse struct {
+	Version string `json:"version"`
+	Err     string `json:"err"`
+}
+
+func (b *BagIt) Make(path string) error {
+	i, err := b.create()
 	if err != nil {
-		return fmt.Errorf("write blob: %v", err)
+		return fmt.Errorf("run python: %v", err)
+	}
+
+	reader := bufio.NewReader(i.stdout)
+
+	if err := i.send(args{
+		Cmd: "make",
+		Opts: &makeRequest{
+			Path: path,
+		},
+	}); err != nil {
+		return err
+	}
+
+	line := bytes.NewBuffer(nil)
+	for {
+		l, p, err := reader.ReadLine()
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("read line: %v", err)
+		}
+		line.Write(l)
+		if !p {
+			break
+		}
+	}
+
+	if line.Len() < 1 {
+		return fmt.Errorf("response not received")
+	}
+
+	r := makeResponse{}
+	err = json.Unmarshal(line.Bytes(), &r)
+	if err != nil {
+		return fmt.Errorf("decode response: %v", err)
+	}
+	if r.Err != "" {
+		return fmt.Errorf("make: %s", r.Err)
 	}
 
 	return nil
@@ -171,9 +225,51 @@ func (b *BagIt) Cleanup() error {
 
 type args struct {
 	Cmd  string `json:"cmd"`
-	Opts *opts  `json:"opts"`
+	Opts any    `json:"opts"`
 }
 
-type opts struct {
-	Path string `json:"path"`
+// runnerInstance is an instance of a Python interpreter executing the
+// bagit-python runner.
+type runnerInstance struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+}
+
+// send a command to the runner.
+func (i *runnerInstance) send(args args) error {
+	blob, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Errorf("encode args: %v", err)
+	}
+	blob = append(blob, '\n')
+
+	_, err = i.stdin.Write(blob)
+	if err != nil {
+		return fmt.Errorf("write blob: %v", err)
+	}
+
+	return nil
+}
+
+func (i *runnerInstance) stop() error {
+	var e error
+
+	if err := i.stdin.Close(); err != nil {
+		e = errors.Join(e, err)
+	}
+
+	if err := i.stdout.Close(); err != nil {
+		e = errors.Join(e, err)
+	}
+
+	if err := i.cmd.Process.Kill(); err != nil {
+		e = errors.Join(e, err)
+	}
+
+	if _, err := i.cmd.Process.Wait(); err != nil {
+		e = errors.Join(e, err)
+	}
+
+	return e
 }
