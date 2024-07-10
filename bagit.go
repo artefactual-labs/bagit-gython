@@ -60,7 +60,7 @@ func NewBagIt() (*BagIt, error) {
 }
 
 // create a Python intepreter running the bagit-python wrapper.
-func (b *BagIt) create() (_ *runnerInstance, err error) {
+func (b *BagIt) create() (*runnerInstance, error) {
 	i := &runnerInstance{}
 
 	cmd, err := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
@@ -103,6 +103,7 @@ func (b *BagIt) Validate(path string) error {
 	if err != nil {
 		return fmt.Errorf("run python: %v", err)
 	}
+	defer i.stop()
 
 	reader := bufio.NewReader(i.stdout)
 
@@ -160,6 +161,7 @@ func (b *BagIt) Make(path string) error {
 	if err != nil {
 		return fmt.Errorf("run python: %v", err)
 	}
+	defer i.stop()
 
 	reader := bufio.NewReader(i.stdout)
 
