@@ -13,6 +13,10 @@ class Command:
     args: Dict[str, Any] = field(default_factory=dict)
 
 
+class ExitError(Exception):
+    pass
+
+
 class Runner:
     def __init__(self, cmd, stdout):
         self.cmd = cmd
@@ -28,8 +32,12 @@ class Runner:
                 resp = self.validate(args)
             elif name == "make":
                 resp = self.make(args)
+            elif name == "exit":
+                self.exit(args)
             else:
                 raise Exception("Unknown command")
+        except ExitError:
+            raise
         except BaseException as err:
             self.write_error(self.stdout, err)
             return
@@ -45,6 +53,9 @@ class Runner:
         bag_dir = args.pop("path")
         bag = make_bag(bag_dir, **args)
         return {"version": bag.version}
+
+    def exit(self, args):
+        raise ExitError
 
     @staticmethod
     def write(stdout, resp):
@@ -69,11 +80,11 @@ def main():
 
         cmd = Command(name=payload.get("name"), args=payload.get("args"))
 
-        if cmd.name == "exit":
-            break
-
         runner = Runner(cmd, sys.stdout)
-        runner.run()
+        try:
+            runner.run()
+        except ExitError:
+            return
 
 
 if __name__ == "__main__":
