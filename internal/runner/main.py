@@ -7,8 +7,9 @@ from bagit import BagError
 
 
 class Runner:
-    def __init__(self, req):
+    def __init__(self, req, stdout):
         self.req = req
+        self.stdout = stdout
 
     @property
     def name(self):
@@ -29,9 +30,10 @@ class Runner:
             else:
                 raise Exception("Unknown command")
         except BaseException as err:
-            resp["err"] = str(err)
+            self.write_error(self.stdout, err)
+            return
 
-        return json.dumps(resp)
+        self.write(self.stdout, resp)
 
     def validate(self, args):
         bag = Bag(args.get("path"))
@@ -42,6 +44,14 @@ class Runner:
         bag_dir = args.pop("path")
         bag = make_bag(bag_dir, **args)
         return {"version": bag.version}
+
+    @staticmethod
+    def write(stdout, resp):
+        print(json.dumps(resp), file=stdout, flush=True)
+
+    @staticmethod
+    def write_error(stdout, err):
+        Runner.write(stdout, {"err": str(err), "type": err.__class__.__name__})
 
 
 def main():
@@ -54,10 +64,8 @@ def main():
         if req.get("name") == "exit":
             break
 
-        result = Runner(req).run()
-
-        sys.stdout.write(result + "\n")
-        sys.stdout.flush()
+        runner = Runner(req, sys.stdout)
+        runner.run()
 
 
 if __name__ == "__main__":
