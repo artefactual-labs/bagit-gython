@@ -92,7 +92,7 @@ type args struct {
 }
 
 // send a command to the runner.
-func (r *pyRunner) send(args args) ([]byte, error) {
+func (r *pyRunner) send(name string, opts any) ([]byte, error) {
 	if ok := r.mu.TryLock(); !ok {
 		return nil, ErrBusy
 	}
@@ -102,7 +102,8 @@ func (r *pyRunner) send(args args) ([]byte, error) {
 		return nil, err
 	}
 
-	blob, err := json.Marshal(args)
+	cmd := args{Cmd: name, Opts: opts}
+	blob, err := json.Marshal(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("encode args: %v", err)
 	}

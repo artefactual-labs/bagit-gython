@@ -75,11 +75,8 @@ type validateResponse struct {
 }
 
 func (b *BagIt) Validate(path string) error {
-	blob, err := b.runner.send(args{
-		Cmd: "validate",
-		Opts: &validateRequest{
-			Path: path,
-		},
+	blob, err := b.runner.send("validate", &validateRequest{
+		Path: path,
 	})
 	if err != nil {
 		return err
@@ -110,11 +107,8 @@ type makeResponse struct {
 }
 
 func (b *BagIt) Make(path string) error {
-	blob, err := b.runner.send(args{
-		Cmd: "make",
-		Opts: &makeRequest{
-			Path: path,
-		},
+	blob, err := b.runner.send("make", &makeRequest{
+		Path: path,
 	})
 	if err != nil {
 		return err
