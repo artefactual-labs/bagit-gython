@@ -1,32 +1,33 @@
 import json
 import multiprocessing
 import sys
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 from bagit import Bag, make_bag
-from bagit import BagError
+
+
+@dataclass
+class Command:
+    name: str
+    args: Dict[str, Any] = field(default_factory=dict)
 
 
 class Runner:
-    def __init__(self, req, stdout):
-        self.req = req
+    def __init__(self, cmd, stdout):
+        self.cmd = cmd
         self.stdout = stdout
 
-    @property
-    def name(self):
-        return self.req.get("name")
-
-    @property
-    def args(self):
-        return self.req.get("args")
-
     def run(self):
-        resp = {}
+        name = self.cmd.name
+        args = self.cmd.args
 
+        resp = {}
         try:
-            if self.name == "validate":
-                resp = self.validate(self.args)
-            elif self.name == "make":
-                resp = self.make(self.args)
+            if name == "validate":
+                resp = self.validate(args)
+            elif name == "make":
+                resp = self.make(args)
             else:
                 raise Exception("Unknown command")
         except BaseException as err:
@@ -56,15 +57,22 @@ class Runner:
 
 def main():
     while True:
-        cmd = sys.stdin.readline()
-        if not cmd:
+        line = sys.stdin.readline()
+        if not line:
             break
 
-        req = json.loads(cmd)
-        if req.get("name") == "exit":
+        try:
+            payload = json.loads(line)
+        except ValueError as err:
+            Runner.write_error(sys.stdout, err)
+            continue
+
+        cmd = Command(name=payload.get("name"), args=payload.get("args"))
+
+        if cmd.name == "exit":
             break
 
-        runner = Runner(req, sys.stdout)
+        runner = Runner(cmd, sys.stdout)
         runner.run()
 
 
