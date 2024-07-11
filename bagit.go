@@ -25,10 +25,10 @@ var ErrInvalid = errors.New("invalid")
 // BagIt is an abstraction to work with BagIt packages that embeds Python and
 // the bagit-python.
 type BagIt struct {
-	tmpDir string                    // Top-level container for embedded files.
-	ep     *python.EmbeddedPython    // Python files.
-	lib    *embed_util.EmbeddedFiles // bagit-python library files.
-	runner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
+	tmpDir      string                    // Top-level container for embedded files.
+	embedPython *python.EmbeddedPython    // Python files.
+	embedBagit  *embed_util.EmbeddedFiles // bagit-python library files.
+	embedRunner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
 }
 
 // NewBagIt creates and initializes a new BagIt instance. This constructor is
@@ -48,15 +48,15 @@ func NewBagIt() (*BagIt, error) {
 	if err != nil {
 		return nil, fmt.Errorf("embed python: %v", err)
 	}
-	b.ep = ep
+	b.embedPython = ep
 
-	b.lib, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(b.tmpDir, "bagit-lib"), true)
+	b.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(b.tmpDir, "bagit-lib"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed bagit: %v", err)
 	}
-	b.ep.AddPythonPath(b.lib.GetExtractedPath())
+	b.embedPython.AddPythonPath(b.embedBagit.GetExtractedPath())
 
-	b.runner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(b.tmpDir, "bagit-runner"), true)
+	b.embedRunner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(b.tmpDir, "bagit-runner"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed runner: %v", err)
 	}
@@ -68,7 +68,7 @@ func NewBagIt() (*BagIt, error) {
 func (b *BagIt) create() (*runnerInstance, error) {
 	i := &runnerInstance{}
 
-	cmd, err := b.ep.PythonCmd(filepath.Join(b.runner.GetExtractedPath(), "main.py"))
+	cmd, err := b.embedPython.PythonCmd(filepath.Join(b.embedRunner.GetExtractedPath(), "main.py"))
 	if err != nil {
 		return nil, fmt.Errorf("create command: %v", err)
 	}
@@ -210,15 +210,15 @@ func (b *BagIt) Make(path string) error {
 func (b *BagIt) Cleanup() error {
 	var e error
 
-	if err := b.runner.Cleanup(); err != nil {
+	if err := b.embedRunner.Cleanup(); err != nil {
 		e = errors.Join(e, fmt.Errorf("clean up runner: %v", err))
 	}
 
-	if err := b.lib.Cleanup(); err != nil {
+	if err := b.embedBagit.Cleanup(); err != nil {
 		e = errors.Join(e, fmt.Errorf("clean up bagit: %v", err))
 	}
 
-	if err := b.ep.Cleanup(); err != nil {
+	if err := b.embedPython.Cleanup(); err != nil {
 		e = errors.Join(e, fmt.Errorf("clean up python: %v", err))
 	}
 
