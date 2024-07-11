@@ -15,9 +15,10 @@ import (
 
 var ErrBusy = errors.New("runner is busy")
 
-// runnerInstance is an instance of a Python interpreter executing the
-// bagit-python runner.
-type runnerInstance struct {
+// pyRunner manages the execution of the Python script wrapping bagit-python.
+// It ensures that only one command is executed at a time and provides
+// mechanisms to send commands and receive responses.
+type pyRunner struct {
 	py           *python.EmbeddedPython
 	entryPoint   string
 	cmd          *exec.Cmd
@@ -27,15 +28,15 @@ type runnerInstance struct {
 	mu           sync.Mutex
 }
 
-func createRunner(py *python.EmbeddedPython, entryPoint string) *runnerInstance {
-	return &runnerInstance{
+func createRunner(py *python.EmbeddedPython, entryPoint string) *pyRunner {
+	return &pyRunner{
 		py:         py,
 		entryPoint: entryPoint,
 	}
 }
 
 // exited determines whether the process has exited.
-func (r *runnerInstance) exited() bool {
+func (r *pyRunner) exited() bool {
 	if r.cmd == nil || r.cmd.ProcessState == nil {
 		return true
 	}
@@ -44,7 +45,7 @@ func (r *runnerInstance) exited() bool {
 }
 
 // ensure that the process is running.
-func (r *runnerInstance) ensure() error {
+func (r *pyRunner) ensure() error {
 	if !r.exited() {
 		return nil
 	}
@@ -82,13 +83,13 @@ type args struct {
 }
 
 // send a command to the runner.
-func (i *runnerInstance) send(args args) ([]byte, error) {
-	if ok := i.mu.TryLock(); !ok {
+func (r *pyRunner) send(args args) ([]byte, error) {
+	if ok := r.mu.TryLock(); !ok {
 		return nil, ErrBusy
 	}
-	defer i.mu.Unlock()
+	defer r.mu.Unlock()
 
-	if err := i.ensure(); err != nil {
+	if err := r.ensure(); err != nil {
 		return nil, err
 	}
 
@@ -98,14 +99,14 @@ func (i *runnerInstance) send(args args) ([]byte, error) {
 	}
 	blob = append(blob, '\n')
 
-	_, err = i.stdin.Write(blob)
+	_, err = r.stdin.Write(blob)
 	if err != nil {
 		return nil, fmt.Errorf("write blob: %v", err)
 	}
 
 	line := bytes.NewBuffer(nil)
 	for {
-		l, p, err := i.stdoutReader.ReadLine()
+		l, p, err := r.stdoutReader.ReadLine()
 		if err != nil && err != io.EOF {
 			return nil, fmt.Errorf("read line: %v", err)
 		}
@@ -122,7 +123,7 @@ func (i *runnerInstance) send(args args) ([]byte, error) {
 }
 
 // quit requests the runner to exit gracefully.
-func (r *runnerInstance) quit() error {
+func (r *pyRunner) quit() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -135,7 +136,7 @@ func (r *runnerInstance) quit() error {
 	return err
 }
 
-func (i *runnerInstance) stop() error {
+func (i *pyRunner) stop() error {
 	var e error
 
 	if err := i.quit(); err != nil {
