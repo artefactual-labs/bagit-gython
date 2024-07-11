@@ -24,18 +24,8 @@ func setUp(t *testing.T) *bagit.BagIt {
 	return b
 }
 
-func TestValidateBag(t *testing.T) {
+func TestConcurrency(t *testing.T) {
 	t.Parallel()
-
-	t.Run("Fails validation", func(t *testing.T) {
-		t.Parallel()
-
-		b := setUp(t)
-
-		err := b.Validate("/tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333")
-		assert.Error(t, err, "invalid: Expected bagit.txt does not exist: /tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333/bagit.txt")
-		assert.Assert(t, errors.Is(err, bagit.ErrInvalid))
-	})
 
 	t.Run("Validates bag", func(t *testing.T) {
 		t.Parallel()
@@ -79,6 +69,33 @@ func TestValidateBag(t *testing.T) {
 		err := g.Wait()
 		assert.NilError(t, err)
 	})
+}
+
+func TestValidateBag(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Fails validation", func(t *testing.T) {
+		t.Parallel()
+
+		b := setUp(t)
+
+		err := b.Validate("/tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333")
+		assert.Error(t, err, "invalid: Expected bagit.txt does not exist: /tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333/bagit.txt")
+		assert.Assert(t, errors.Is(err, bagit.ErrInvalid))
+	})
+
+	t.Run("Validates bag", func(t *testing.T) {
+		t.Parallel()
+
+		b := setUp(t)
+
+		err := b.Validate("internal/testdata/valid-bag")
+		assert.NilError(t, err)
+	})
+}
+
+func TestMakeBag(t *testing.T) {
+	t.Parallel()
 
 	t.Run("Creates bag", func(t *testing.T) {
 		t.Parallel()
