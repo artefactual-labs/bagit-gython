@@ -17,6 +17,11 @@ import (
 	"github.com/kluctl/go-embed-python/python"
 )
 
+// ErrInvalid indicates that bag validation failed. If there is a validation
+// error message, ErrInvalid will be wrapped so make sure to use
+// `errors.Is(err, ErrInvalid)` to test equivalency.
+var ErrInvalid = errors.New("invalid")
+
 // BagIt is an abstraction to work with BagIt packages that embeds Python and
 // the bagit-python.
 type BagIt struct {
@@ -138,10 +143,10 @@ func (b *BagIt) Validate(path string) error {
 		return fmt.Errorf("decode response: %v", err)
 	}
 	if r.Err != "" {
-		return fmt.Errorf("invalid: %s", r.Err)
+		return fmt.Errorf("%w: %s", ErrInvalid, r.Err)
 	}
 	if !r.Valid {
-		return fmt.Errorf("invalid: %s", r.Err)
+		return ErrInvalid
 	}
 
 	return nil

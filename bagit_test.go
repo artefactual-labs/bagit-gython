@@ -1,6 +1,7 @@
 package bagit_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/artefactual-labs/bagit-gython"
@@ -33,6 +34,7 @@ func TestValidateBag(t *testing.T) {
 
 		err := b.Validate("/tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333")
 		assert.Error(t, err, "invalid: Expected bagit.txt does not exist: /tmp/691b8e7f-e6b7-41dd-bc47-868e2ff69333/bagit.txt")
+		assert.Assert(t, errors.Is(err, bagit.ErrInvalid))
 	})
 
 	t.Run("Validates bag", func(t *testing.T) {
