@@ -25,7 +25,7 @@ type BagIt struct {
 	embedPython *python.EmbeddedPython    // Python files.
 	embedBagit  *embed_util.EmbeddedFiles // bagit-python library files.
 	embedRunner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
-	runner      *runnerInstance
+	runner      *pyRunner
 }
 
 // NewBagIt creates and initializes a new BagIt instance. This constructor is
