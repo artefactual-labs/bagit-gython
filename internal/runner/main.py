@@ -11,21 +11,21 @@ class Runner:
         self.req = req
 
     @property
-    def cmd(self):
-        return self.req.get("cmd")
+    def name(self):
+        return self.req.get("name")
 
     @property
-    def opts(self):
-        return self.req.get("opts")
+    def args(self):
+        return self.req.get("args")
 
     def run(self):
         resp = {}
 
         try:
-            if self.cmd == "validate":
-                resp = self.validate(self.opts)
-            elif self.cmd == "make":
-                resp = self.make(self.opts)
+            if self.name == "validate":
+                resp = self.validate(self.args)
+            elif self.name == "make":
+                resp = self.make(self.args)
             else:
                 raise Exception("Unknown command")
         except BaseException as err:
@@ -33,14 +33,14 @@ class Runner:
 
         return json.dumps(resp)
 
-    def validate(self, opts):
-        bag = Bag(opts.get("path"))
+    def validate(self, args):
+        bag = Bag(args.get("path"))
         bag.validate(processes=multiprocessing.cpu_count())
         return {"valid": True}
 
-    def make(self, opts):
-        bag_dir = opts.pop("path")
-        bag = make_bag(bag_dir, **opts)
+    def make(self, args):
+        bag_dir = args.pop("path")
+        bag = make_bag(bag_dir, **args)
         return {"version": bag.version}
 
 
@@ -51,7 +51,7 @@ def main():
             break
 
         req = json.loads(cmd)
-        if req.get("cmd") == "exit":
+        if req.get("name") == "exit":
             break
 
         result = Runner(req).run()

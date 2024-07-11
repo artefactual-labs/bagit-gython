@@ -86,13 +86,13 @@ func (r *pyRunner) ensure() error {
 	return nil
 }
 
-type args struct {
-	Cmd  string `json:"cmd"`
-	Opts any    `json:"opts"`
+type cmd struct {
+	Name string `json:"name"` // Name of the command, e.g.: "validate", "make", etc...
+	Args any    `json:"args"` // Payload, e.g. &validateRequest{}.
 }
 
 // send a command to the runner.
-func (r *pyRunner) send(name string, opts any) ([]byte, error) {
+func (r *pyRunner) send(name string, args any) ([]byte, error) {
 	if ok := r.mu.TryLock(); !ok {
 		return nil, ErrBusy
 	}
@@ -102,7 +102,7 @@ func (r *pyRunner) send(name string, opts any) ([]byte, error) {
 		return nil, err
 	}
 
-	cmd := args{Cmd: name, Opts: opts}
+	cmd := cmd{Name: name, Args: args}
 	blob, err := json.Marshal(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("encode args: %v", err)
