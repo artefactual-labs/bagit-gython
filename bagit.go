@@ -1,12 +1,9 @@
 package bagit
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -28,6 +25,7 @@ type BagIt struct {
 	embedPython *python.EmbeddedPython    // Python files.
 	embedBagit  *embed_util.EmbeddedFiles // bagit-python library files.
 	embedRunner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
+	runner      *runnerInstance
 }
 
 // NewBagIt creates and initializes a new BagIt instance. This constructor is
@@ -43,11 +41,10 @@ func NewBagIt() (*BagIt, error) {
 		return nil, fmt.Errorf("make tmpDir: %v", err)
 	}
 
-	ep, err := python.NewEmbeddedPythonWithTmpDir(filepath.Join(b.tmpDir, "python"), true)
+	b.embedPython, err = python.NewEmbeddedPythonWithTmpDir(filepath.Join(b.tmpDir, "python"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed python: %v", err)
 	}
-	b.embedPython = ep
 
 	b.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(b.tmpDir, "bagit-lib"), true)
 	if err != nil {
@@ -59,6 +56,11 @@ func NewBagIt() (*BagIt, error) {
 	if err != nil {
 		return nil, fmt.Errorf("embed runner: %v", err)
 	}
+
+	b.runner = createRunner(
+		b.embedPython,
+		filepath.Join(b.embedRunner.GetExtractedPath(), "main.py"),
+	)
 
 	return b, nil
 }
@@ -73,41 +75,18 @@ type validateResponse struct {
 }
 
 func (b *BagIt) Validate(path string) error {
-	i, err := b.create()
-	if err != nil {
-		return fmt.Errorf("run python: %v", err)
-	}
-	defer i.stop()
-
-	reader := bufio.NewReader(i.stdout)
-
-	if err := i.send(args{
+	blob, err := b.runner.send(args{
 		Cmd: "validate",
 		Opts: &validateRequest{
 			Path: path,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 
-	line := bytes.NewBuffer(nil)
-	for {
-		l, p, err := reader.ReadLine()
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("read line: %v", err)
-		}
-		line.Write(l)
-		if !p {
-			break
-		}
-	}
-
-	if line.Len() < 1 {
-		return fmt.Errorf("response not received")
-	}
-
 	r := validateResponse{}
-	err = json.Unmarshal(line.Bytes(), &r)
+	err = json.Unmarshal(blob, &r)
 	if err != nil {
 		return fmt.Errorf("decode response: %v", err)
 	}
@@ -131,41 +110,18 @@ type makeResponse struct {
 }
 
 func (b *BagIt) Make(path string) error {
-	i, err := b.create()
-	if err != nil {
-		return fmt.Errorf("run python: %v", err)
-	}
-	defer i.stop()
-
-	reader := bufio.NewReader(i.stdout)
-
-	if err := i.send(args{
+	blob, err := b.runner.send(args{
 		Cmd: "make",
 		Opts: &makeRequest{
 			Path: path,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 
-	line := bytes.NewBuffer(nil)
-	for {
-		l, p, err := reader.ReadLine()
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("read line: %v", err)
-		}
-		line.Write(l)
-		if !p {
-			break
-		}
-	}
-
-	if line.Len() < 1 {
-		return fmt.Errorf("response not received")
-	}
-
 	r := makeResponse{}
-	err = json.Unmarshal(line.Bytes(), &r)
+	err = json.Unmarshal(blob, &r)
 	if err != nil {
 		return fmt.Errorf("decode response: %v", err)
 	}
@@ -178,6 +134,10 @@ func (b *BagIt) Make(path string) error {
 
 func (b *BagIt) Cleanup() error {
 	var e error
+
+	if err := b.runner.stop(); err != nil {
+		e = errors.Join(e, fmt.Errorf("stop runner: %v", err))
+	}
 
 	if err := b.embedRunner.Cleanup(); err != nil {
 		e = errors.Join(e, fmt.Errorf("clean up runner: %v", err))
