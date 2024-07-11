@@ -46,7 +46,7 @@ func TestValidateBag(t *testing.T) {
 		assert.NilError(t, err)
 	})
 
-	t.Run("Validates bag concurrently", func(t *testing.T) {
+	t.Run("Returns ErrBusy if the resource is busy", func(t *testing.T) {
 		t.Parallel()
 
 		b := setUp(t)
@@ -54,8 +54,24 @@ func TestValidateBag(t *testing.T) {
 		// This test should pass because each call to Validate() creates its own
 		// distinct Python interpreter instance.
 		var g errgroup.Group
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 3; i++ {
 			g.Go(func() error {
+				return b.Validate("internal/testdata/valid-bag")
+			})
+		}
+
+		err := g.Wait()
+		assert.ErrorIs(t, err, bagit.ErrBusy)
+	})
+
+	t.Run("Parallel execution", func(t *testing.T) {
+		t.Parallel()
+
+		// *bagit.BagIt is not shareable, each goroutine must create its own.
+		var g errgroup.Group
+		for i := 0; i < 3; i++ {
+			g.Go(func() error {
+				b := setUp(t)
 				return b.Validate("internal/testdata/valid-bag")
 			})
 		}
