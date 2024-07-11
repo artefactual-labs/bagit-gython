@@ -13,11 +13,18 @@ class Command:
     args: Dict[str, Any] = field(default_factory=dict)
 
 
+class UnknownCommandError(Exception):
+    pass
+
+
 class ExitError(Exception):
     pass
 
 
 class Runner:
+    ALLOWED_COMMANDS = ("validate", "make", "exit")
+    ALLOWED_COMMANDS_LIST = ", ".join(ALLOWED_COMMANDS)
+
     def __init__(self, cmd, stdout):
         self.cmd = cmd
         self.stdout = stdout
@@ -28,14 +35,8 @@ class Runner:
 
         resp = {}
         try:
-            if name == "validate":
-                resp = self.validate(args)
-            elif name == "make":
-                resp = self.make(args)
-            elif name == "exit":
-                self.exit(args)
-            else:
-                raise Exception("Unknown command")
+            ret = self.get_handler(name)(args)
+            resp.update(ret)
         except ExitError:
             raise
         except BaseException as err:
@@ -44,17 +45,27 @@ class Runner:
 
         self.write(self.stdout, resp)
 
-    def validate(self, args):
+    def get_handler(self, name):
+        if name not in self.ALLOWED_COMMANDS:
+            raise UnknownCommandError(
+                f"'{name}' is not a valid command, use: {self.ALLOWED_COMMANDS_LIST}"
+            )
+        handler = getattr(self, f"{name}_handler")
+        if handler is None:
+            raise UnknownCommandError(f"'{name}' does not have a handler")
+        return handler
+
+    def validate_handler(self, args):
         bag = Bag(args.get("path"))
         bag.validate(processes=multiprocessing.cpu_count())
         return {"valid": True}
 
-    def make(self, args):
+    def make_handler(self, args):
         bag_dir = args.pop("path")
         bag = make_bag(bag_dir, **args)
         return {"version": bag.version}
 
-    def exit(self, args):
+    def exit_handler(self, args):
         raise ExitError
 
     @staticmethod
