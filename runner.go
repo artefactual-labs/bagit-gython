@@ -14,12 +14,6 @@ import (
 	"github.com/kluctl/go-embed-python/python"
 )
 
-// ErrBusy is returned when an operation is attempted on BagIt while it is
-// already processing another command. This ensures that only one command is
-// processed at a time, preventing race conditions and ensuring the integrity
-// of the shared resources.
-var ErrBusy = errors.New("runner is busy")
-
 // pyRunner manages the execution of the Python script wrapping bagit-python.
 // It ensures that only one command is executed at a time and provides
 // mechanisms to send commands and receive responses.

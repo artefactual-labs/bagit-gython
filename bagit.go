@@ -13,10 +13,18 @@ import (
 	"github.com/kluctl/go-embed-python/python"
 )
 
-// ErrInvalid indicates that bag validation failed. If there is a validation
-// error message, ErrInvalid will be wrapped so make sure to use
-// `errors.Is(err, ErrInvalid)` to test equivalency.
-var ErrInvalid = errors.New("invalid")
+var (
+	// ErrInvalid indicates that bag validation failed. If there is a validation
+	// error message, ErrInvalid will be wrapped so make sure to use
+	// `errors.Is(err, ErrInvalid)` to test equivalency.
+	ErrInvalid = errors.New("invalid")
+
+	// ErrBusy is returned when an operation is attempted on BagIt while it is
+	// already processing another command. This ensures that only one command is
+	// processed at a time, preventing race conditions and ensuring the
+	// integrity of the shared resources.
+	ErrBusy = errors.New("runner is busy")
+)
 
 // BagIt is an abstraction to work with BagIt packages that embeds Python and
 // the bagit-python.
