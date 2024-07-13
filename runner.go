@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 
 	"github.com/kluctl/go-embed-python/python"
 )
@@ -19,13 +20,15 @@ var ErrBusy = errors.New("runner is busy")
 // It ensures that only one command is executed at a time and provides
 // mechanisms to send commands and receive responses.
 type pyRunner struct {
-	py           *python.EmbeddedPython
-	entryPoint   string
-	cmd          *exec.Cmd
-	stdin        io.WriteCloser
-	stdout       io.ReadCloser
-	stdoutReader *bufio.Reader
-	mu           sync.Mutex
+	py           *python.EmbeddedPython // Instance of EmbeddedPython.
+	entryPoint   string                 // Path to the runner wrapper entry point.
+	cmd          *exec.Cmd              // Command running Python interpreter.
+	running      atomic.Bool            // Tracks whether the command is still running.
+	wg           sync.WaitGroup         // Tracks the cmd monitor goroutine.
+	stdin        io.WriteCloser         // Standard input stream.
+	stdout       io.ReadCloser          // Standard output stream.
+	stdoutReader *bufio.Reader          // Standard output stream (buffered reader).
+	mu           sync.Mutex             // Prevents sharing the command (see ErrBusy).
 }
 
 func createRunner(py *python.EmbeddedPython, entryPoint string) *pyRunner {
@@ -35,18 +38,9 @@ func createRunner(py *python.EmbeddedPython, entryPoint string) *pyRunner {
 	}
 }
 
-// exited determines whether the process has exited.
-func (r *pyRunner) exited() bool {
-	if r.cmd == nil || r.cmd.ProcessState == nil {
-		return true
-	}
-
-	return r.cmd.ProcessState.Exited()
-}
-
 // ensure that the process is running.
 func (r *pyRunner) ensure() error {
-	if !r.exited() {
+	if r.running.Load() {
 		return nil
 	}
 
@@ -56,6 +50,7 @@ func (r *pyRunner) ensure() error {
 		return fmt.Errorf("start runner: %v", err)
 	}
 
+	// Useful for debugging the Python application.
 	// r.cmd.Stderr = os.Stderr
 
 	r.stdin, err = r.cmd.StdinPipe()
@@ -73,6 +68,16 @@ func (r *pyRunner) ensure() error {
 	if err != nil {
 		return fmt.Errorf("start cmd: %v", err)
 	}
+
+	r.running.Store(true)
+
+	// Monitor the command from a dedicated goroutine.
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		_ = r.cmd.Wait()
+		r.running.Store(false)
+	}()
 
 	return nil
 }
@@ -124,12 +129,12 @@ func (r *pyRunner) send(args args) ([]byte, error) {
 
 // quit requests the runner to exit gracefully.
 func (r *pyRunner) quit() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.exited() {
+	if r.running.Load() {
 		return nil
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	_, err := r.stdin.Write([]byte(`{"name": "exit"}`))
 
@@ -155,9 +160,7 @@ func (i *pyRunner) stop() error {
 		e = errors.Join(e, err)
 	}
 
-	if _, err := i.cmd.Process.Wait(); err != nil {
-		e = errors.Join(e, err)
-	}
+	i.wg.Wait()
 
 	return e
 }
