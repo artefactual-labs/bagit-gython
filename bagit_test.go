@@ -11,17 +11,25 @@ import (
 	"gotest.tools/v3/fs"
 )
 
-func setUp(t *testing.T) *bagit.BagIt {
-	t.Helper()
+func setUp(tb testing.TB) *bagit.BagIt {
+	tb.Helper()
 
 	b, err := bagit.NewBagIt()
-	assert.NilError(t, err)
+	assert.NilError(tb, err)
 
-	t.Cleanup(func() {
-		assert.NilError(t, b.Cleanup())
+	tb.Cleanup(func() {
+		assert.NilError(tb, b.Cleanup())
 	})
 
 	return b
+}
+
+func BenchmarkValidate(b *testing.B) {
+	bagit := setUp(b)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bagit.Validate("internal/testdata/valid-bag")
+	}
 }
 
 func TestValidateBag(t *testing.T) {
