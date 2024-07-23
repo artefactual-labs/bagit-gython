@@ -1,6 +1,6 @@
 module github.com/artefactual-labs/bagit-gython
 
-go 1.21
+go 1.19
 
 require (
 	github.com/kluctl/go-embed-python v0.0.0-3.12.3-20240415-1

@@ -31,10 +31,10 @@ import "github.com/artefactual-labs/bagit-gython"
 Check out [`example`], a small program that imports bagit-python to validate a
 bag:
 
-    $ go run ./example/ -validate /tmp/invalid-bag/
+    $ go run . -validate /tmp/invalid-bag/
     Validation failed: invalid: Payload-Oxum validation failed. Expected 1 files and 0 bytes but found 2 files and 0 bytesexit status 1
 
-    $ go run ./example/ -validate /tmp/valid-bag/
+    $ go run . -validate /tmp/valid-bag/
     Valid!
 
 ## Supported architectures
