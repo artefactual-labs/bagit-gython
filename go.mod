@@ -3,8 +3,8 @@ module github.com/artefactual-labs/bagit-gython
 go 1.21
 
 require (
-	github.com/kluctl/go-embed-python v0.0.0-3.12.3-20240415-1
-	golang.org/x/sync v0.7.0
+	github.com/kluctl/go-embed-python v0.0.0-3.12.3-20240415-2
+	golang.org/x/sync v0.8.0
 	gotest.tools/v3 v3.5.1
 )
 
