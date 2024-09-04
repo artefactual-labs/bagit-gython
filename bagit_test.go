@@ -139,3 +139,13 @@ Tag-File-Character-Encoding: UTF-8
 		assert.ErrorContains(t, err, "does not exist")
 	})
 }
+
+func TestCleanup(t *testing.T) {
+	t.Parallel()
+
+	b, err := bagit.NewBagIt()
+	assert.NilError(t, err)
+
+	err = b.Cleanup()
+	assert.NilError(t, err)
+}

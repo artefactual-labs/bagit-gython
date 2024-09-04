@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/kluctl/go-embed-python/python"
 )
@@ -135,31 +136,43 @@ func (r *pyRunner) quit() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	_, err := r.stdin.Write([]byte(`{"name": "exit"}`))
+	var err error
+	if r.stdin != nil {
+		_, err = r.stdin.Write([]byte(`{"name": "exit"}`))
+	}
 
 	return err
 }
 
-func (i *pyRunner) stop() error {
+func (r *pyRunner) stop() error {
 	var e error
 
-	if err := i.quit(); err != nil {
+	if err := r.quit(); err != nil {
 		e = errors.Join(e, err)
 	}
 
-	if err := i.stdin.Close(); err != nil {
-		e = errors.Join(e, err)
+	// Wait up to a second, otherwise force to exit immediately.
+	if closed := wait(&r.wg, time.Second); !closed {
+		if err := r.cmd.Process.Kill(); err != nil {
+			e = errors.Join(e, err)
+		}
 	}
 
-	if err := i.stdout.Close(); err != nil {
-		e = errors.Join(e, err)
-	}
-
-	if err := i.cmd.Process.Kill(); err != nil {
-		e = errors.Join(e, err)
-	}
-
-	i.wg.Wait()
+	r.wg.Wait()
 
 	return e
+}
+
+func wait(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
