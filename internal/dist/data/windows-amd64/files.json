@@ -1,94 +1,79 @@
 {
-  "contentHash": "9f61ab290903616280e2f88b60680a97ac13a656126f6fa1a0b46bdb3ab5aabf",
+  "contentHash": "8bc5d2a983078cc82b219a9a352f3a22696f4e8b9e42576326ed13b5f97f24e0",
   "files": [
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info",
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 2147484157
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/INSTALLER",
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/INSTALLER",
       "size": 4,
-      "modTime": 1713519588,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/METADATA",
-      "size": 8167,
-      "modTime": 1713519588,
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/METADATA",
+      "size": 7527,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/RECORD",
-      "size": 994,
-      "modTime": 1713519588,
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/RECORD",
+      "size": 986,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/REQUESTED",
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/REQUESTED",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/WHEEL",
-      "size": 110,
-      "modTime": 1713519588,
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/WHEEL",
+      "size": 91,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/direct_url.json",
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/direct_url.json",
       "size": 211,
-      "modTime": 1713519588,
       "perm": 436
     },
     {
-      "name": "bagit-1.8.1.dev26+g5b77243.dist-info/top_level.txt",
+      "name": "bagit-1.9b3.dev3+gda04180.dist-info/top_level.txt",
       "size": 6,
-      "modTime": 1713519588,
       "perm": 436
     },
     {
       "name": "bagit.py",
-      "size": 55530,
-      "modTime": 1713519588,
+      "size": 54701,
       "perm": 436
     },
     {
       "name": "bin",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 2147484157
     },
     {
       "name": "bin/bagit.py",
-      "size": 55552,
-      "modTime": 1713519588,
+      "size": 54723,
       "perm": 509
     },
     {
       "name": "locale",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 2147484157
     },
     {
       "name": "locale/en",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 2147484157
     },
     {
       "name": "locale/en/LC_MESSAGES",
       "size": 0,
-      "modTime": 1713519588,
       "perm": 2147484157
     },
     {
       "name": "locale/en/LC_MESSAGES/bagit-python.mo",
       "size": 2808,
-      "modTime": 1713519588,
       "perm": 436,
       "compressed": true
     }

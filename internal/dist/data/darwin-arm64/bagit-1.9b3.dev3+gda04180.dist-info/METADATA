@@ -1,33 +1,22 @@
 Metadata-Version: 2.1
 Name: bagit
-Version: 1.8.1.dev26+g5b77243
+Version: 1.9b3.dev3+gda04180
 Summary: Create and validate BagIt packages
 Home-page: https://libraryofcongress.github.io/bagit-python/
 Author: Ed Summers
-Author-email: ehs@pobox.com
+Author-email: Ed Summers <ehs@pobox.com>
+Project-URL: Homepage, https://libraryofcongress.github.io/bagit-python/
 Platform: POSIX
-Classifier: License :: Public Domain
 Classifier: Intended Audience :: Developers
+Classifier: License :: Public Domain
+Classifier: Programming Language :: Python :: 3
 Classifier: Topic :: Communications :: File Sharing
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: System :: Filesystems
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
-Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.1
-Classifier: Programming Language :: Python :: 3.2
-Classifier: Programming Language :: Python :: 3.3
-Classifier: Programming Language :: Python :: 3.4
-Classifier: Programming Language :: Python :: 3.5
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: 3.8
-Requires-Dist: importlib-metadata ; python_version < "3.8"
+Description-Content-Type: text/x-rst
 
 bagit-python
 ============
-
-|Build Status| |Coverage Status|
 
 bagit is a Python library and command line utility for working with
 `BagIt <http://purl.org/net/bagit>`__ style packages.
@@ -42,7 +31,7 @@ project as needed or you can install globally with:
 
     pip install bagit
 
-Python v2.7+ is required.
+A supported version of Python 3 is required.
 
 Command Line Usage
 ------------------
@@ -252,20 +241,11 @@ Contributing to bagit-python development
 Running the tests
 ~~~~~~~~~~~~~~~~~
 
-You can quickly run the tests by having setuptools install dependencies:
+You can quickly run the tests using the built-in unittest framework:
 
 ::
 
-    python setup.py test
-
-Once your code is working, you can use
-`Tox <https://tox.readthedocs.io/>`__ to run the tests with every
-supported version of Python which you have installed on the local
-system:
-
-::
-
-    tox
+    python -m unittest discover
 
 If you have Docker installed, you can run the tests under Linux inside a
 container:
