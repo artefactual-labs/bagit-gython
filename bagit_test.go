@@ -54,7 +54,7 @@ func TestConcurrency(t *testing.T) {
 		// This test should pass because each call to Validate() creates its own
 		// distinct Python interpreter instance.
 		var g errgroup.Group
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			g.Go(func() error {
 				return b.Validate("internal/testdata/valid-bag")
 			})
@@ -69,7 +69,7 @@ func TestConcurrency(t *testing.T) {
 
 		// *bagit.BagIt is not shareable, each goroutine must create its own.
 		var g errgroup.Group
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			g.Go(func() error {
 				b := setUp(t)
 				return b.Validate("internal/testdata/valid-bag")

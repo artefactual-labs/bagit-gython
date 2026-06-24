@@ -20,7 +20,7 @@ func TestValidator(t *testing.T) {
 		assert.Equal(t, v.PoolSize(), 2)
 
 		var g errgroup.Group
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			g.Go(func() error {
 				return v.Validate("internal/testdata/valid-bag")
 			})
