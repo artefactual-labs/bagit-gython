@@ -17,7 +17,7 @@ func TestValidatorBoundsTempDirectories(t *testing.T) {
 	assert.Equal(t, len(dirs), 2)
 
 	var g errgroup.Group
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		g.Go(func() error {
 			return v.Validate("internal/testdata/valid-bag")
 		})

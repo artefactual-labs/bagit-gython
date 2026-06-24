@@ -71,12 +71,10 @@ func (r *pyRunner) ensure() error {
 	r.running.Store(true)
 
 	// Monitor the command from a dedicated goroutine.
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		_ = r.cmd.Wait()
 		r.running.Store(false)
-	}()
+	})
 
 	return nil
 }
