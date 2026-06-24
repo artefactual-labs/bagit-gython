@@ -10,9 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - name: Run tests
         run: go test -v -race ./...
   mod:
@@ -20,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - name: Check
-        run: |
-          go mod tidy
-          git diff --name-only --exit-code || (echo "Please run 'go mod tidy'."; exit 1)
+        run: go mod tidy -diff
