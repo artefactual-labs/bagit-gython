@@ -119,7 +119,7 @@ func TestMakeBag(t *testing.T) {
 
 		assert.Assert(t, fs.Equal(tmpDir.Path(), fs.Expected(t,
 			fs.WithDir("data", fs.WithFile("test.txt", "abcd"), fs.MatchAnyFileMode),
-			fs.WithFile("bagit.txt", `BagIt-Version: 0.97
+			fs.WithFile("bagit.txt", `BagIt-Version: 1.0
 Tag-File-Character-Encoding: UTF-8
 `, fs.MatchAnyFileMode),
 			fs.WithFile("bag-info.txt", "", fs.MatchAnyFileContent, fs.MatchAnyFileMode),

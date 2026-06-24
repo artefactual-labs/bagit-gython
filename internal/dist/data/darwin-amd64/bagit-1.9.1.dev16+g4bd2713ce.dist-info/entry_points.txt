@@ -1,0 +1,2 @@
+[console_scripts]
+bagit = bagit:main

@@ -1,1 +1,1 @@
-bagit @ git+https://github.com/LibraryOfCongress/bagit-python@da041808d2453da2209054a9f4c48187dc323c0a
+bagit @ git+https://github.com/LibraryOfCongress/bagit-python@4bd2713cedbe1f8e634567c20ef0dded9622011d

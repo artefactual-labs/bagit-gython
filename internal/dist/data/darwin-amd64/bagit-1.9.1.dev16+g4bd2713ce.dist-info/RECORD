@@ -1,0 +1,13 @@
+../../bin/bagit,sha256=j1KZ5H0cdx5xCfFtYDZI01tkH1pOIHoCC1iCzRMpVQA,176
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/METADATA,sha256=tFwLx2x8kF2zlTFWx9SHe_TRo1Co6KGNNTRq8WqQ_PI,7498
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/RECORD,,
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/WHEEL,sha256=mffPy8wBnZQn2VnJUU5jE99KsxaSfiyMHV9Yt0aLVxs,87
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/direct_url.json,sha256=5c_cFpxwidJtOUROa9yd0SNUixKJiHQsxxaqYa-JGW8,211
+bagit-1.9.1.dev16+g4bd2713ce.dist-info/entry_points.txt,sha256=UDSUG50qnqdca1r9ve9L1FD3vfiPETwX9kQPjltCt68,37
+bagit/__init__.py,sha256=HbqKqyWSIGD3YC0sH29IznaGOXJPuuvkSUvDcPjxO4Q,55582
+bagit/__pycache__/__init__.cpython-314.pyc,,
+bagit/locale/bagit-python.pot,sha256=fRexMufdv-y3UbmscQCKB9sZfJf0rpT-OeeEGJAnE1I,8547
+bagit/locale/bagit.pot,sha256=EE-AvszUEzH7GlUY6k4QxuTrZelSDtN_J4TzFP1pWHE,3252
+bagit/locale/en/LC_MESSAGES/bagit-python.po,sha256=av-cK9HXV_FR28iCTYPFw4kVRkDej4VRaRkzRsGD0Lo,10274
