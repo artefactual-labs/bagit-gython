@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,7 +10,13 @@ import (
 )
 
 const usage = `Usage:
-	$ example -validate=/tmp/bag -pool-size=2`
+		$ example -api=validator -validate=/tmp/bag -pool-size=2
+		$ example -api=bagit -validate=/tmp/bag`
+
+const (
+	apiValidator = "validator"
+	apiBagIt     = "bagit"
+)
 
 func main() {
 	os.Exit(run())
@@ -23,8 +30,10 @@ func run() int {
 		return 1
 	}
 
+	var api string
 	var validate string
 	var poolSize int
+	flag.StringVar(&api, "api", apiValidator, "API to use: validator or bagit")
 	flag.StringVar(&validate, "validate", "", "path of bag to validate")
 	flag.IntVar(&poolSize, "pool-size", 1, "number of concurrent validators")
 	flag.Parse()
@@ -34,22 +43,55 @@ func run() int {
 		return 1
 	}
 
-	validator, err := bagit.NewValidator(bagit.WithPoolSize(poolSize))
-	if err != nil {
-		fmt.Println(err)
+	var err error
+	switch api {
+	case apiValidator:
+		err = validateWithPooledValidator(validate, poolSize)
+	case apiBagIt:
+		err = validateWithSingleRunner(validate)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown API %q\n", api)
+		flag.Usage()
 		return 1
 	}
-	defer func() {
-		if err := validator.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Cleanup failed: %v\n", err)
-		}
-	}()
 
-	if err := validator.Validate(validate); err != nil {
+	if err != nil {
 		fmt.Printf("Validation failed: %v\n", err)
 		return 1
 	}
 
 	fmt.Println("Valid!")
 	return 0
+}
+
+func validateWithPooledValidator(path string, poolSize int) error {
+	validator, err := bagit.NewValidator(bagit.WithPoolSize(poolSize))
+	if err != nil {
+		return err
+	}
+
+	validateErr := validator.Validate(path)
+	cleanupErr := validator.Close()
+
+	return joinValidationAndCleanup(validateErr, cleanupErr, "clean up validator")
+}
+
+func validateWithSingleRunner(path string) error {
+	b, err := bagit.NewBagIt()
+	if err != nil {
+		return err
+	}
+
+	validateErr := b.Validate(path)
+	cleanupErr := b.Cleanup()
+
+	return joinValidationAndCleanup(validateErr, cleanupErr, "clean up bagit")
+}
+
+func joinValidationAndCleanup(validateErr, cleanupErr error, cleanupOp string) error {
+	if cleanupErr != nil {
+		cleanupErr = fmt.Errorf("%s: %v", cleanupOp, cleanupErr)
+	}
+
+	return errors.Join(validateErr, cleanupErr)
 }

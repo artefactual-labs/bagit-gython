@@ -28,13 +28,17 @@ import "github.com/artefactual-labs/bagit-gython"
 
 ## Usage
 
-Check out [`example`], a small program that validates a bag with a pooled
-validator:
+Check out [`example`], a small program that validates a bag with either the
+pooled `Validator` API or the lower-level `BagIt` API:
 
-    $ go run ./example/ -validate /tmp/invalid-bag/
+    $ cd example
+    $ go run . -api validator -validate /tmp/invalid-bag/
     Validation failed: invalid: Payload-Oxum validation failed. Expected 1 files and 0 bytes but found 2 files and 0 bytes
 
-    $ go run ./example/ -validate /tmp/valid-bag/ -pool-size 2
+    $ go run . -api validator -validate /tmp/valid-bag/ -pool-size 2
+    Valid!
+
+    $ go run . -api bagit -validate /tmp/valid-bag/
     Valid!
 
 For long-running applications, create one `Validator` at process startup and
