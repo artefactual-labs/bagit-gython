@@ -129,16 +129,18 @@ func (r *pyRunner) send(name string, args any) ([]byte, error) {
 
 // quit requests the runner to exit gracefully.
 func (r *pyRunner) quit() error {
-	if r.running.Load() {
+	if !r.running.Load() {
 		return nil
 	}
 
-	r.mu.Lock()
+	if ok := r.mu.TryLock(); !ok {
+		return nil
+	}
 	defer r.mu.Unlock()
 
 	var err error
 	if r.stdin != nil {
-		_, err = r.stdin.Write([]byte(`{"name": "exit"}`))
+		_, err = r.stdin.Write([]byte(`{"name":"exit"}` + "\n"))
 	}
 
 	return err
