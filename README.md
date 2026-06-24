@@ -28,14 +28,68 @@ import "github.com/artefactual-labs/bagit-gython"
 
 ## Usage
 
-Check out [`example`], a small program that imports bagit-python to validate a
-bag:
+Check out [`example`], a small program that validates a bag with a pooled
+validator:
 
     $ go run ./example/ -validate /tmp/invalid-bag/
-    Validation failed: invalid: Payload-Oxum validation failed. Expected 1 files and 0 bytes but found 2 files and 0 bytesexit status 1
+    Validation failed: invalid: Payload-Oxum validation failed. Expected 1 files and 0 bytes but found 2 files and 0 bytes
 
-    $ go run ./example/ -validate /tmp/valid-bag/
+    $ go run ./example/ -validate /tmp/valid-bag/ -pool-size 2
     Valid!
+
+For long-running applications, create one `Validator` at process startup and
+reuse it:
+
+```go
+validator, err := bagit.NewValidator(bagit.WithPoolSize(4))
+if err != nil {
+    return err
+}
+defer func() {
+    if err := validator.Close(); err != nil {
+        // Handle cleanup error.
+    }
+}()
+
+if err := validator.Validate("/tmp/valid-bag"); err != nil {
+    return err
+}
+```
+
+`Validator` owns a bounded pool of embedded BagIt runners. At most `poolSize`
+validations run at once; additional calls wait for a runner instead of creating
+new temporary Python extractions. With `WithPoolSize(4)`, a process creates at
+most four `bagit-gython-*` temporary roots for that validator lifecycle.
+
+Use `ValidateContext` when waiting for an available runner should respect
+caller cancellation or deadlines. Use `TryValidate` when the caller should get
+`ErrBusy` immediately instead of waiting for a runner.
+
+This is the preferred API for worker processes and Temporal activities. For
+example, a Temporal worker can create the validator during startup, pass it to
+an activity that accepts a `Validate(path string) error` interface, and close it
+during worker shutdown:
+
+```go
+validator, err := bagit.NewValidator(bagit.WithPoolSize(4))
+if err != nil {
+    return err
+}
+defer func() {
+    if err := validator.Close(); err != nil {
+        // Handle cleanup error.
+    }
+}()
+
+tw.RegisterActivityWithOptions(
+    bagvalidate.New(validator).Execute,
+    activity.RegisterOptions{Name: bagvalidate.Name},
+)
+```
+
+`BagIt` is still available as a lower-level single-runner API, but it is not
+safe for concurrent operations. Prefer `Validator` unless you are deliberately
+managing one `BagIt` instance per caller.
 
 ## Supported architectures
 
