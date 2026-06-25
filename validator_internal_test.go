@@ -9,22 +9,23 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func TestValidatorBoundsTempDirectories(t *testing.T) {
-	v, err := NewValidator(WithPoolSize(2))
+func TestValidatorSharesRuntimeRootAcrossPool(t *testing.T) {
+	v, err := NewValidator(WithPoolSize(4))
 	assert.NilError(t, err)
 
-	dirs := validatorTempDirs(v)
-	assert.Equal(t, len(dirs), 2)
+	dirs := validatorRuntimeDirs(v)
+	assert.Equal(t, len(dirs), 1)
+	assert.Equal(t, v.PoolSize(), 4)
 
 	var g errgroup.Group
-	for range 6 {
+	for range 8 {
 		g.Go(func() error {
 			return v.Validate("internal/testdata/valid-bag")
 		})
 	}
 	assert.NilError(t, g.Wait())
 
-	assert.DeepEqual(t, validatorTempDirs(v), dirs)
+	assert.DeepEqual(t, validatorRuntimeDirs(v), dirs)
 	assert.NilError(t, v.Close())
 
 	for _, dir := range dirs {
@@ -64,13 +65,22 @@ func TestValidatorTryValidateReturnsErrBusyWhenPoolBusy(t *testing.T) {
 	assert.ErrorIs(t, err, ErrBusy)
 }
 
-func validatorTempDirs(v *Validator) []string {
+func validatorRuntimeDirs(v *Validator) []string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	dirs := make([]string, 0, len(v.pool))
+	dirs := make([]string, 0, 1)
+	seen := make(map[string]struct{})
 	for _, b := range v.pool {
-		dirs = append(dirs, b.tmpDir)
+		if b.runtime == nil {
+			continue
+		}
+		dir := b.runtime.tmpDir
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		dirs = append(dirs, dir)
 	}
 
 	return dirs

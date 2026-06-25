@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +49,7 @@ func (r *pyRunner) ensure() error {
 	if err != nil {
 		return fmt.Errorf("start runner: %v", err)
 	}
+	r.cmd.Env = withEnv(r.cmd.Env, "PYTHONDONTWRITEBYTECODE=1")
 
 	// Useful for debugging the Python application.
 	// r.cmd.Stderr = os.Stderr
@@ -175,4 +177,21 @@ func wait(wg *sync.WaitGroup, timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+func withEnv(env []string, kv string) []string {
+	key, _, ok := strings.Cut(kv, "=")
+	if !ok {
+		return append(env, kv)
+	}
+
+	prefix := key + "="
+	for i, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			env[i] = kv
+			return env
+		}
+	}
+
+	return append(env, kv)
 }

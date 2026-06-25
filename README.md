@@ -60,10 +60,11 @@ if err := validator.Validate("/tmp/valid-bag"); err != nil {
 }
 ```
 
-`Validator` owns a bounded pool of embedded BagIt runners. At most `poolSize`
-validations run at once; additional calls wait for a runner instead of creating
-new temporary Python extractions. With `WithPoolSize(4)`, a process creates at
-most four `bagit-gython-*` temporary roots for that validator lifecycle.
+`Validator` owns one shared embedded Python extraction and a bounded pool of
+BagIt runners. At most `poolSize` validations run at once; additional calls wait
+for a runner instead of creating new temporary Python extractions. With
+`WithPoolSize(4)`, a process creates one `bagit-gython-*` temporary root and
+up to four runner processes for that validator lifecycle.
 
 Use `ValidateContext` when waiting for an available runner should respect
 caller cancellation or deadlines. Use `TryValidate` when the caller should get

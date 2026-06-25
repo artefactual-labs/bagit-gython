@@ -25,7 +25,7 @@ var (
 	// integrity of the shared resources.
 	ErrBusy = errors.New("runner is busy")
 
-	// ErrClosed is returned when an operation is attempted on a closed
+	// ErrClosed is returned when an operation is attempted on a closed BagIt or
 	// Validator.
 	ErrClosed = errors.New("validator is closed")
 )
@@ -33,11 +33,16 @@ var (
 // BagIt is an abstraction to work with BagIt packages that embeds Python and
 // the bagit-python.
 type BagIt struct {
+	runtime     *bagItRuntime
+	ownsRuntime bool
+	runner      *pyRunner
+}
+
+type bagItRuntime struct {
 	tmpDir      string                    // Top-level container for embedded files.
 	embedPython *python.EmbeddedPython    // Python files.
 	embedBagit  *embed_util.EmbeddedFiles // bagit-python library files.
 	embedRunner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
-	runner      *pyRunner
 }
 
 // NewBagIt creates and initializes a new BagIt instance. This constructor is
@@ -46,44 +51,59 @@ type BagIt struct {
 // possible, but do not use the same BagIt concurrently. Use Validator when a
 // shared concurrency-safe validator is needed.
 func NewBagIt() (_ *BagIt, err error) {
-	b := &BagIt{}
+	runtime, err := newBagItRuntime()
+	if err != nil {
+		return nil, err
+	}
+
+	return newBagIt(runtime, true), nil
+}
+
+func newBagItRuntime() (_ *bagItRuntime, err error) {
+	runtime := &bagItRuntime{}
 	ok := false
 	defer func() {
 		if !ok {
-			if cleanupErr := b.Cleanup(); cleanupErr != nil {
+			if cleanupErr := runtime.cleanup(); cleanupErr != nil {
 				err = errors.Join(err, fmt.Errorf("clean up failed initialization: %v", cleanupErr))
 			}
 		}
 	}()
 
-	b.tmpDir, err = os.MkdirTemp("", "bagit-gython-*")
+	runtime.tmpDir, err = os.MkdirTemp("", "bagit-gython-*")
 	if err != nil {
 		return nil, fmt.Errorf("make tmpDir: %v", err)
 	}
 
-	b.embedPython, err = python.NewEmbeddedPythonWithTmpDir(filepath.Join(b.tmpDir, "python"), true)
+	runtime.embedPython, err = python.NewEmbeddedPythonWithTmpDir(filepath.Join(runtime.tmpDir, "python"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed python: %v", err)
 	}
 
-	b.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(b.tmpDir, "bagit-lib"), true)
+	runtime.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(runtime.tmpDir, "bagit-lib"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed bagit: %v", err)
 	}
-	b.embedPython.AddPythonPath(b.embedBagit.GetExtractedPath())
+	runtime.embedPython.AddPythonPath(runtime.embedBagit.GetExtractedPath())
 
-	b.embedRunner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(b.tmpDir, "bagit-runner"), true)
+	runtime.embedRunner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(runtime.tmpDir, "bagit-runner"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed runner: %v", err)
 	}
 
-	b.runner = createRunner(
-		b.embedPython,
-		filepath.Join(b.embedRunner.GetExtractedPath(), "main.py"),
-	)
-
 	ok = true
-	return b, nil
+	return runtime, nil
+}
+
+func newBagIt(runtime *bagItRuntime, ownsRuntime bool) *BagIt {
+	return &BagIt{
+		runtime:     runtime,
+		ownsRuntime: ownsRuntime,
+		runner: createRunner(
+			runtime.embedPython,
+			filepath.Join(runtime.embedRunner.GetExtractedPath(), "main.py"),
+		),
+	}
 }
 
 type validateRequest struct {
@@ -96,7 +116,7 @@ type validateResponse struct {
 }
 
 func (b *BagIt) Validate(path string) error {
-	blob, err := b.runner.send("validate", &validateRequest{
+	blob, err := b.send("validate", &validateRequest{
 		Path: path,
 	})
 	if err != nil {
@@ -128,7 +148,7 @@ type makeResponse struct {
 }
 
 func (b *BagIt) Make(path string) error {
-	blob, err := b.runner.send("make", &makeRequest{
+	blob, err := b.send("make", &makeRequest{
 		Path: path,
 	})
 	if err != nil {
@@ -147,6 +167,14 @@ func (b *BagIt) Make(path string) error {
 	return nil
 }
 
+func (b *BagIt) send(name string, args any) ([]byte, error) {
+	if b == nil || b.runner == nil {
+		return nil, ErrClosed
+	}
+
+	return b.runner.send(name, args)
+}
+
 func (b *BagIt) Cleanup() error {
 	var e error
 
@@ -154,31 +182,45 @@ func (b *BagIt) Cleanup() error {
 		if err := b.runner.stop(); err != nil {
 			e = errors.Join(e, fmt.Errorf("stop runner: %v", err))
 		}
+		b.runner = nil
 	}
 
-	if b.embedRunner != nil {
-		if err := b.embedRunner.Cleanup(); err != nil {
+	if b.ownsRuntime && b.runtime != nil {
+		if err := b.runtime.cleanup(); err != nil {
+			e = errors.Join(e, err)
+		}
+		b.runtime = nil
+	}
+
+	return e
+}
+
+func (r *bagItRuntime) cleanup() error {
+	var e error
+
+	if r.embedRunner != nil {
+		if err := r.embedRunner.Cleanup(); err != nil {
 			e = errors.Join(e, fmt.Errorf("clean up runner: %v", err))
 		}
 	}
 
-	if b.embedBagit != nil {
-		if err := b.embedBagit.Cleanup(); err != nil {
+	if r.embedBagit != nil {
+		if err := r.embedBagit.Cleanup(); err != nil {
 			e = errors.Join(e, fmt.Errorf("clean up bagit: %v", err))
 		}
 	}
 
-	if b.embedPython != nil {
-		if err := b.embedPython.Cleanup(); err != nil {
+	if r.embedPython != nil {
+		if err := r.embedPython.Cleanup(); err != nil {
 			e = errors.Join(e, fmt.Errorf("clean up python: %v", err))
 		}
 	}
 
-	if b.tmpDir != "" {
-		if err := os.RemoveAll(b.tmpDir); err != nil {
+	if r.tmpDir != "" {
+		if err := os.RemoveAll(r.tmpDir); err != nil {
 			e = errors.Join(e, fmt.Errorf("clean up tmpDir: %v", err))
 		}
-		b.tmpDir = ""
+		r.tmpDir = ""
 	}
 
 	return e

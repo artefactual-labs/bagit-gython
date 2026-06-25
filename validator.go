@@ -21,14 +21,14 @@ type validatorConfig struct {
 // WithPoolSize sets the number of BagIt runners owned by a Validator.
 //
 // A larger pool allows more validations to run in parallel, at the cost of
-// creating more embedded Python runner instances and temporary directories.
+// creating more embedded Python runner processes.
 func WithPoolSize(size int) ValidatorOption {
 	return func(cfg *validatorConfig) {
 		cfg.poolSize = size
 	}
 }
 
-// Validator is a bounded pool of BagIt validators.
+// Validator is a bounded pool of BagIt validators sharing one embedded runtime.
 //
 // It is safe for concurrent use. At most pool size validations are executed at
 // the same time; additional callers wait for a runner to become available
@@ -37,10 +37,11 @@ type Validator struct {
 	poolSize int64
 	sem      *semaphore.Weighted
 
-	mu     sync.Mutex
-	pool   []*BagIt
-	idle   []*BagIt
-	closed bool
+	mu      sync.Mutex
+	pool    []*BagIt
+	idle    []*BagIt
+	closed  bool
+	runtime *bagItRuntime
 
 	closeOnce sync.Once
 	closeErr  error
@@ -58,25 +59,21 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 		return nil, fmt.Errorf("pool size must be greater than zero")
 	}
 
+	runtime, err := newBagItRuntime()
+	if err != nil {
+		return nil, err
+	}
+
 	v := &Validator{
 		poolSize: int64(cfg.poolSize),
 		sem:      semaphore.NewWeighted(int64(cfg.poolSize)),
 		pool:     make([]*BagIt, 0, cfg.poolSize),
 		idle:     make([]*BagIt, 0, cfg.poolSize),
+		runtime:  runtime,
 	}
 
 	for i := 0; i < cfg.poolSize; i++ {
-		b, err := NewBagIt()
-		if err != nil {
-			cleanupErr := v.cleanup()
-			if cleanupErr != nil {
-				return nil, errors.Join(
-					fmt.Errorf("create validator runner %d: %v", i+1, err),
-					fmt.Errorf("clean up validator: %v", cleanupErr),
-				)
-			}
-			return nil, fmt.Errorf("create validator runner %d: %v", i+1, err)
-		}
+		b := newBagIt(runtime, false)
 		v.pool = append(v.pool, b)
 		v.idle = append(v.idle, b)
 	}
@@ -265,13 +262,20 @@ func (v *Validator) close() error {
 func (v *Validator) cleanup() error {
 	v.mu.Lock()
 	pool := v.pool
+	runtime := v.runtime
 	v.pool = nil
 	v.idle = nil
+	v.runtime = nil
 	v.mu.Unlock()
 
 	var e error
 	for _, b := range pool {
 		if err := b.Cleanup(); err != nil {
+			e = errors.Join(e, err)
+		}
+	}
+	if runtime != nil {
+		if err := runtime.cleanup(); err != nil {
 			e = errors.Join(e, err)
 		}
 	}

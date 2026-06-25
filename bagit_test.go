@@ -148,4 +148,10 @@ func TestCleanup(t *testing.T) {
 
 	err = b.Cleanup()
 	assert.NilError(t, err)
+
+	err = b.Validate("internal/testdata/valid-bag")
+	assert.ErrorIs(t, err, bagit.ErrClosed)
+
+	err = b.Make("internal/testdata/valid-bag")
+	assert.ErrorIs(t, err, bagit.ErrClosed)
 }
