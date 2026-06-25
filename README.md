@@ -62,9 +62,16 @@ if err := validator.Validate("/tmp/valid-bag"); err != nil {
 
 `Validator` owns one shared embedded Python extraction and a bounded pool of
 BagIt runners. At most `poolSize` validations run at once; additional calls wait
-for a runner instead of creating new temporary Python extractions. With
-`WithPoolSize(4)`, a process creates one `bagit-gython-*` temporary root and
-up to four runner processes for that validator lifecycle.
+for a runner instead of creating new Python extractions. By default, the
+extracted runtime is cached under the user's cache directory in `bagit-gython`.
+With `WithPoolSize(4)`, a process uses one runtime cache root and up to four
+runner processes for that validator lifecycle.
+
+Use `WithCacheDir("/path/to/cache")` to choose the runtime cache location. Use
+`WithCacheDir("")` to disable the persistent cache and return to a temporary
+runtime root that `Close` removes. Cached runtime files are content-hash scoped,
+so changes to the embedded Python, bagit-python, or runner files extract into
+new cache directories while warm starts can reuse existing files.
 
 Use `ValidateContext` when waiting for an available runner should respect
 caller cancellation or deadlines. Use `TryValidate` when the caller should get

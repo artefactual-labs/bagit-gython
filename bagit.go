@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/artefactual-labs/bagit-gython/internal/dist/data"
 	"github.com/artefactual-labs/bagit-gython/internal/runner"
@@ -38,8 +39,13 @@ type BagIt struct {
 	runner      *pyRunner
 }
 
+type bagItRuntimeConfig struct {
+	cacheDir string
+}
+
 type bagItRuntime struct {
-	tmpDir      string                    // Top-level container for embedded files.
+	rootDir     string                    // Top-level container for embedded files.
+	persistent  bool                      // Keep embedded files after cleanup.
 	embedPython *python.EmbeddedPython    // Python files.
 	embedBagit  *embed_util.EmbeddedFiles // bagit-python library files.
 	embedRunner *embed_util.EmbeddedFiles // bagit-python wrapper files (runner).
@@ -51,7 +57,7 @@ type bagItRuntime struct {
 // possible, but do not use the same BagIt concurrently. Use Validator when a
 // shared concurrency-safe validator is needed.
 func NewBagIt() (_ *BagIt, err error) {
-	runtime, err := newBagItRuntime()
+	runtime, err := newBagItRuntime(bagItRuntimeConfig{})
 	if err != nil {
 		return nil, err
 	}
@@ -59,40 +65,72 @@ func NewBagIt() (_ *BagIt, err error) {
 	return newBagIt(runtime, true), nil
 }
 
-func newBagItRuntime() (_ *bagItRuntime, err error) {
+func newBagItRuntime(cfg bagItRuntimeConfig) (_ *bagItRuntime, err error) {
 	runtime := &bagItRuntime{}
 	ok := false
 	defer func() {
-		if !ok {
+		if !ok && !runtime.persistent {
 			if cleanupErr := runtime.cleanup(); cleanupErr != nil {
 				err = errors.Join(err, fmt.Errorf("clean up failed initialization: %v", cleanupErr))
 			}
 		}
 	}()
 
-	runtime.tmpDir, err = os.MkdirTemp("", "bagit-gython-*")
-	if err != nil {
-		return nil, fmt.Errorf("make tmpDir: %v", err)
+	if cfg.cacheDir == "" {
+		runtime.rootDir, err = os.MkdirTemp("", "bagit-gython-*")
+		if err != nil {
+			return nil, fmt.Errorf("make runtime root: %v", err)
+		}
+	} else {
+		runtime.rootDir = cfg.cacheDir
+		runtime.persistent = true
+		if err := prepareRuntimeCacheDir(runtime.rootDir); err != nil {
+			return nil, err
+		}
 	}
 
-	runtime.embedPython, err = python.NewEmbeddedPythonWithTmpDir(filepath.Join(runtime.tmpDir, "python"), true)
+	runtime.embedPython, err = python.NewEmbeddedPythonWithTmpDir(filepath.Join(runtime.rootDir, "python"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed python: %v", err)
 	}
 
-	runtime.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(runtime.tmpDir, "bagit-lib"), true)
+	runtime.embedBagit, err = embed_util.NewEmbeddedFilesWithTmpDir(data.Data, filepath.Join(runtime.rootDir, "bagit-lib"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed bagit: %v", err)
 	}
 	runtime.embedPython.AddPythonPath(runtime.embedBagit.GetExtractedPath())
 
-	runtime.embedRunner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(runtime.tmpDir, "bagit-runner"), true)
+	runtime.embedRunner, err = embed_util.NewEmbeddedFilesWithTmpDir(runner.Source, filepath.Join(runtime.rootDir, "bagit-runner"), true)
 	if err != nil {
 		return nil, fmt.Errorf("embed runner: %v", err)
 	}
 
 	ok = true
 	return runtime, nil
+}
+
+func prepareRuntimeCacheDir(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return fmt.Errorf("make runtime cache dir: %v", err)
+	}
+
+	st, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat runtime cache dir: %v", err)
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("runtime cache path %q is not a directory", path)
+	}
+
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf(
+			"runtime cache dir %q is unsafe: mode %04o allows group or other writes",
+			path,
+			st.Mode().Perm(),
+		)
+	}
+
+	return nil
 }
 
 func newBagIt(runtime *bagItRuntime, ownsRuntime bool) *BagIt {
@@ -196,6 +234,10 @@ func (b *BagIt) Cleanup() error {
 }
 
 func (r *bagItRuntime) cleanup() error {
+	if r == nil || r.persistent {
+		return nil
+	}
+
 	var e error
 
 	if r.embedRunner != nil {
@@ -216,11 +258,11 @@ func (r *bagItRuntime) cleanup() error {
 		}
 	}
 
-	if r.tmpDir != "" {
-		if err := os.RemoveAll(r.tmpDir); err != nil {
-			e = errors.Join(e, fmt.Errorf("clean up tmpDir: %v", err))
+	if r.rootDir != "" {
+		if err := os.RemoveAll(r.rootDir); err != nil {
+			e = errors.Join(e, fmt.Errorf("clean up runtime root: %v", err))
 		}
-		r.tmpDir = ""
+		r.rootDir = ""
 	}
 
 	return e

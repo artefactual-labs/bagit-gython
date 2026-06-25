@@ -4,18 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"golang.org/x/sync/semaphore"
 )
 
-const defaultValidatorPoolSize = 1
+const (
+	defaultValidatorPoolSize     = 1
+	defaultValidatorCacheDirName = "bagit-gython"
+)
 
 // ValidatorOption configures a Validator.
 type ValidatorOption func(*validatorConfig)
 
 type validatorConfig struct {
 	poolSize int
+	cacheDir string
 }
 
 // WithPoolSize sets the number of BagIt runners owned by a Validator.
@@ -25,6 +31,18 @@ type validatorConfig struct {
 func WithPoolSize(size int) ValidatorOption {
 	return func(cfg *validatorConfig) {
 		cfg.poolSize = size
+	}
+}
+
+// WithCacheDir sets the directory used to cache embedded runtime files.
+//
+// Validators use os.UserCacheDir()/bagit-gython by default. The cache stores
+// content-hash-scoped embedded Python, bagit-python, and runner files so later
+// validators can reuse the same extraction. Pass an empty string to disable the
+// persistent cache and use a temporary runtime root cleaned up by Close.
+func WithCacheDir(path string) ValidatorOption {
+	return func(cfg *validatorConfig) {
+		cfg.cacheDir = path
 	}
 }
 
@@ -49,9 +67,14 @@ type Validator struct {
 
 // NewValidator creates a concurrency-safe BagIt validator pool.
 //
-// The default pool size is 1.
+// The default pool size is 1. Embedded runtime files are cached under the
+// user's cache directory by default; use WithCacheDir to choose a different
+// location or to disable persistent caching.
 func NewValidator(opts ...ValidatorOption) (*Validator, error) {
-	cfg := validatorConfig{poolSize: defaultValidatorPoolSize}
+	cfg := validatorConfig{
+		poolSize: defaultValidatorPoolSize,
+		cacheDir: defaultValidatorCacheDir(),
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -59,7 +82,7 @@ func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 		return nil, fmt.Errorf("pool size must be greater than zero")
 	}
 
-	runtime, err := newBagItRuntime()
+	runtime, err := newBagItRuntime(bagItRuntimeConfig{cacheDir: cfg.cacheDir})
 	if err != nil {
 		return nil, err
 	}
@@ -281,4 +304,13 @@ func (v *Validator) cleanup() error {
 	}
 
 	return e
+}
+
+func defaultValidatorCacheDir() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+
+	return filepath.Join(dir, defaultValidatorCacheDirName)
 }

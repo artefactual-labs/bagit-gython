@@ -11,7 +11,7 @@ import (
 
 func TestValidator(t *testing.T) {
 	t.Run("Validates bags concurrently", func(t *testing.T) {
-		v, err := bagit.NewValidator(bagit.WithPoolSize(2))
+		v, err := bagit.NewValidator(bagit.WithPoolSize(2), bagit.WithCacheDir(""))
 		assert.NilError(t, err)
 		t.Cleanup(func() {
 			assert.NilError(t, v.Close())
@@ -30,7 +30,7 @@ func TestValidator(t *testing.T) {
 	})
 
 	t.Run("Reports invalid bags", func(t *testing.T) {
-		v, err := bagit.NewValidator()
+		v, err := bagit.NewValidator(bagit.WithCacheDir(""))
 		assert.NilError(t, err)
 		t.Cleanup(func() {
 			assert.NilError(t, v.Close())
@@ -41,7 +41,7 @@ func TestValidator(t *testing.T) {
 	})
 
 	t.Run("TryValidate validates bag without waiting", func(t *testing.T) {
-		v, err := bagit.NewValidator()
+		v, err := bagit.NewValidator(bagit.WithCacheDir(""))
 		assert.NilError(t, err)
 		t.Cleanup(func() {
 			assert.NilError(t, v.Close())
@@ -57,7 +57,7 @@ func TestValidator(t *testing.T) {
 	})
 
 	t.Run("Returns ErrClosed after close", func(t *testing.T) {
-		v, err := bagit.NewValidator()
+		v, err := bagit.NewValidator(bagit.WithCacheDir(""))
 		assert.NilError(t, err)
 
 		assert.NilError(t, v.Close())

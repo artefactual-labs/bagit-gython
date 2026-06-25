@@ -11,6 +11,7 @@ import (
 
 const usage = `Usage:
 		$ example -api=validator -validate=/tmp/bag -pool-size=2
+		$ example -api=validator -validate=/tmp/bag -cache-dir=/tmp/bagit-cache
 		$ example -api=bagit -validate=/tmp/bag`
 
 const (
@@ -32,9 +33,11 @@ func run() int {
 
 	var api string
 	var validate string
+	var cacheDir string
 	var poolSize int
 	flag.StringVar(&api, "api", apiValidator, "API to use: validator or bagit")
 	flag.StringVar(&validate, "validate", "", "path of bag to validate")
+	flag.StringVar(&cacheDir, "cache-dir", "", "validator runtime cache directory")
 	flag.IntVar(&poolSize, "pool-size", 1, "number of concurrent validators")
 	flag.Parse()
 
@@ -46,7 +49,7 @@ func run() int {
 	var err error
 	switch api {
 	case apiValidator:
-		err = validateWithPooledValidator(validate, poolSize)
+		err = validateWithPooledValidator(validate, poolSize, cacheDir)
 	case apiBagIt:
 		err = validateWithSingleRunner(validate)
 	default:
@@ -64,8 +67,13 @@ func run() int {
 	return 0
 }
 
-func validateWithPooledValidator(path string, poolSize int) error {
-	validator, err := bagit.NewValidator(bagit.WithPoolSize(poolSize))
+func validateWithPooledValidator(path string, poolSize int, cacheDir string) error {
+	opts := []bagit.ValidatorOption{bagit.WithPoolSize(poolSize)}
+	if cacheDir != "" {
+		opts = append(opts, bagit.WithCacheDir(cacheDir))
+	}
+
+	validator, err := bagit.NewValidator(opts...)
 	if err != nil {
 		return err
 	}
