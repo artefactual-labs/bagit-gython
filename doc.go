@@ -27,6 +27,9 @@
 // path to choose the cache location. WithCacheDir("") also uses the default,
 // which makes empty config-file values safe to pass through. Use
 // WithTempCacheDir to use a temporary extraction that Close removes.
+// WithDeferredRuntime delays runtime extraction and runner pool creation until
+// the first validation request. Concurrent first requests wait for one shared
+// setup to complete before using the initialized pool.
 //
 // BagIt is the lower-level single-runner type. It is useful for short-lived
 // commands or for callers that want to manage runner lifetimes themselves. A

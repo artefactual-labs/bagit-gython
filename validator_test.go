@@ -51,6 +51,17 @@ func TestValidator(t *testing.T) {
 		assert.NilError(t, err)
 	})
 
+	t.Run("Deferred runtime validates bag", func(t *testing.T) {
+		v, err := bagit.NewValidator(bagit.WithDeferredRuntime(), bagit.WithTempCacheDir())
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			assert.NilError(t, v.Close())
+		})
+
+		err = v.Validate("internal/testdata/valid-bag")
+		assert.NilError(t, err)
+	})
+
 	t.Run("Rejects invalid pool size", func(t *testing.T) {
 		_, err := bagit.NewValidator(bagit.WithPoolSize(0))
 		assert.Error(t, err, "pool size must be greater than zero")

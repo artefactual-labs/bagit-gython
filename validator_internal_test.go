@@ -89,6 +89,106 @@ func TestValidatorUsesPersistentCacheDir(t *testing.T) {
 	assert.NilError(t, v.Close())
 }
 
+func TestValidatorWithDeferredRuntimeBootstrapsOnFirstValidate(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+
+	v, err := NewValidator(WithDeferredRuntime(), WithCacheDir(cacheDir))
+	assert.NilError(t, err)
+	t.Cleanup(func() {
+		assert.NilError(t, v.Close())
+	})
+
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{})
+	assert.DeepEqual(t, validatorRuntimeExtractedPaths(v), []string(nil))
+	_, err = os.Stat(cacheDir)
+	assert.Assert(t, os.IsNotExist(err))
+
+	assert.NilError(t, v.Validate("internal/testdata/valid-bag"))
+
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{cacheDir})
+	paths := validatorRuntimeExtractedPaths(v)
+	assert.Equal(t, len(paths), 3)
+	for _, path := range paths {
+		assertPathInDir(t, path, cacheDir)
+		assertPathExists(t, path)
+	}
+}
+
+func TestValidatorWithDeferredRuntimeBootstrapsOnceForConcurrentRequests(t *testing.T) {
+	v, err := NewValidator(WithDeferredRuntime(), WithPoolSize(4), WithTempCacheDir())
+	assert.NilError(t, err)
+
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{})
+	assert.Equal(t, v.PoolSize(), 4)
+
+	var g errgroup.Group
+	for range 8 {
+		g.Go(func() error {
+			return v.Validate("internal/testdata/valid-bag")
+		})
+	}
+	assert.NilError(t, g.Wait())
+
+	dirs := validatorRuntimeDirs(v)
+	assert.Equal(t, len(dirs), 1)
+	assert.NilError(t, v.Close())
+
+	for _, dir := range dirs {
+		_, err := os.Stat(dir)
+		assert.Assert(t, os.IsNotExist(err))
+	}
+}
+
+func TestValidatorWithDeferredRuntimeCloseBeforeFirstValidate(t *testing.T) {
+	v, err := NewValidator(WithDeferredRuntime(), WithTempCacheDir())
+	assert.NilError(t, err)
+
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{})
+	assert.NilError(t, v.Close())
+	assert.NilError(t, v.Close())
+
+	err = v.Validate("internal/testdata/valid-bag")
+	assert.ErrorIs(t, err, ErrClosed)
+}
+
+func TestValidatorWithDeferredRuntimeRejectsUnsafeCacheDirOnFirstValidate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix mode bits are not reliable on windows")
+	}
+
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	assert.NilError(t, os.Mkdir(cacheDir, 0o700))
+	assert.NilError(t, os.Chmod(cacheDir, 0o777))
+
+	v, err := NewValidator(WithDeferredRuntime(), WithCacheDir(cacheDir))
+	assert.NilError(t, err)
+	t.Cleanup(func() {
+		assert.NilError(t, v.Close())
+	})
+
+	err = v.Validate("internal/testdata/valid-bag")
+	assert.ErrorContains(t, err, "unsafe")
+
+	err = v.Validate("internal/testdata/valid-bag")
+	assert.ErrorContains(t, err, "unsafe")
+}
+
+func TestValidatorWithDeferredRuntimeTryValidateBootstraps(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+
+	v, err := NewValidator(WithDeferredRuntime(), WithCacheDir(cacheDir))
+	assert.NilError(t, err)
+	t.Cleanup(func() {
+		assert.NilError(t, v.Close())
+	})
+
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{})
+
+	err = v.TryValidate("internal/testdata/valid-bag")
+	assert.NilError(t, err)
+	assert.DeepEqual(t, validatorRuntimeDirs(v), []string{cacheDir})
+}
+
 func TestValidatorRejectsUnsafeCacheDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix mode bits are not reliable on windows")

@@ -62,6 +62,7 @@ Runtime cache configuration is explicit:
 | `WithCacheDir("")` | Use the default persistent cache, `os.UserCacheDir()/bagit-gython`. |
 | `WithCacheDir("/path/to/cache")` | Use that persistent cache directory. |
 | `WithTempCacheDir()` | Disable the persistent cache and use a temporary runtime root that `Close` removes. |
+| `WithDeferredRuntime()` | Delay runtime extraction and runner pool creation until the first validation request. |
 
 If cache configuration comes from a config file, treat the field as optional:
 when it is unset or empty, omit `WithCacheDir` or pass `WithCacheDir("")` to use
@@ -70,6 +71,13 @@ the default cache; when it is set to a non-empty path, pass that path. Use
 root. Cached runtime files are content-hash scoped, so changes to the embedded
 Python, bagit-python, or runner files extract into new cache directories while
 warm starts can reuse existing files.
+
+By default, `NewValidator` extracts the embedded runtime and creates the runner
+pool before returning. Use `WithDeferredRuntime()` when startup should avoid
+that work until the validator is actually used. The first validation request
+performs setup synchronously; concurrent first requests wait behind that setup
+and then share the initialized pool. `TryValidate` can also pay this setup cost
+after it acquires a runner slot.
 
 Use `ValidateContext` when waiting for an available runner should respect
 caller cancellation or deadlines. Use `TryValidate` when the caller should get

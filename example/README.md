@@ -17,6 +17,18 @@ Use a dedicated runtime cache path for the pooled validator:
 go run . -api validator -validate ../internal/testdata/valid-bag -cache-dir /tmp/bagit-cache
 ```
 
+Defer runtime setup until the first validation request:
+
+```sh
+go run . -api validator -validate ../internal/testdata/valid-bag -deferred-runtime
+```
+
+Print constructor, validation, and cleanup timings:
+
+```sh
+go run . -api validator -validate ../internal/testdata/valid-bag -deferred-runtime -timings
+```
+
 ```sh
 go run . -api bagit -validate ../internal/testdata/valid-bag
 ```
