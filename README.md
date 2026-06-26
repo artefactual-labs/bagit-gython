@@ -28,19 +28,6 @@ import "github.com/artefactual-labs/bagit-gython"
 
 ## Usage
 
-Check out [`example`], a small program that validates a bag with either the
-pooled `Validator` API or the lower-level `BagIt` API:
-
-    $ cd example
-    $ go run . -api validator -validate /tmp/invalid-bag/
-    Validation failed: invalid: Payload-Oxum validation failed. Expected 1 files and 0 bytes but found 2 files and 0 bytes
-
-    $ go run . -api validator -validate /tmp/valid-bag/ -pool-size 2
-    Valid!
-
-    $ go run . -api bagit -validate /tmp/valid-bag/
-    Valid!
-
 For long-running applications, create one `Validator` at process startup and
 reuse it:
 
@@ -67,11 +54,22 @@ extracted runtime is cached under the user's cache directory in `bagit-gython`.
 With `WithPoolSize(4)`, a process uses one runtime cache root and up to four
 runner processes for that validator lifecycle.
 
-Use `WithCacheDir("/path/to/cache")` to choose the runtime cache location. Use
-`WithCacheDir("")` to disable the persistent cache and return to a temporary
-runtime root that `Close` removes. Cached runtime files are content-hash scoped,
-so changes to the embedded Python, bagit-python, or runner files extract into
-new cache directories while warm starts can reuse existing files.
+Runtime cache configuration is explicit:
+
+| Configuration | Result |
+| --- | --- |
+| Omit `WithCacheDir` | Use the default persistent cache, `os.UserCacheDir()/bagit-gython`. |
+| `WithCacheDir("")` | Use the default persistent cache, `os.UserCacheDir()/bagit-gython`. |
+| `WithCacheDir("/path/to/cache")` | Use that persistent cache directory. |
+| `WithTempCacheDir()` | Disable the persistent cache and use a temporary runtime root that `Close` removes. |
+
+If cache configuration comes from a config file, treat the field as optional:
+when it is unset or empty, omit `WithCacheDir` or pass `WithCacheDir("")` to use
+the default cache; when it is set to a non-empty path, pass that path. Use
+`WithTempCacheDir()` only when the operator explicitly wants a temporary runtime
+root. Cached runtime files are content-hash scoped, so changes to the embedded
+Python, bagit-python, or runner files extract into new cache directories while
+warm starts can reuse existing files.
 
 Use `ValidateContext` when waiting for an available runner should respect
 caller cancellation or deadlines. Use `TryValidate` when the caller should get
@@ -102,6 +100,19 @@ tw.RegisterActivityWithOptions(
 `BagIt` is still available as a lower-level single-runner API, but it is not
 safe for concurrent operations. Prefer `Validator` unless you are deliberately
 managing one `BagIt` instance per caller.
+
+The [`example`] directory contains a small command-line program that validates a
+bag with either API:
+
+    $ cd example
+    $ go run . -api validator -validate ../internal/testdata/valid-bag -pool-size 2
+    Valid!
+
+    $ go run . -api validator -validate ../internal/testdata/valid-bag -cache-dir /tmp/bagit-cache
+    Valid!
+
+    $ go run . -api bagit -validate ../internal/testdata/valid-bag
+    Valid!
 
 ## Supported architectures
 

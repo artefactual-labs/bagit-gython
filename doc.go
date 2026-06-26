@@ -22,9 +22,11 @@
 // immediately when no runner is available.
 //
 // By default, Validator caches extracted runtime files below the user's cache
-// directory so later validators and process starts can reuse them. Use
-// WithCacheDir to choose the cache location, or WithCacheDir("") to use a
-// temporary extraction that Close removes.
+// directory in "bagit-gython" so later validators and process starts can reuse
+// them. Omit WithCacheDir to use that default. Use WithCacheDir with a non-empty
+// path to choose the cache location. WithCacheDir("") also uses the default,
+// which makes empty config-file values safe to pass through. Use
+// WithTempCacheDir to use a temporary extraction that Close removes.
 //
 // BagIt is the lower-level single-runner type. It is useful for short-lived
 // commands or for callers that want to manage runner lifetimes themselves. A

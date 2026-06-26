@@ -38,11 +38,26 @@ func WithPoolSize(size int) ValidatorOption {
 //
 // Validators use os.UserCacheDir()/bagit-gython by default. The cache stores
 // content-hash-scoped embedded Python, bagit-python, and runner files so later
-// validators can reuse the same extraction. Pass an empty string to disable the
-// persistent cache and use a temporary runtime root cleaned up by Close.
+// validators can reuse the same extraction. Omit WithCacheDir to use the
+// default. Pass a non-empty path to use a different persistent cache directory,
+// or pass an empty string to use the default.
 func WithCacheDir(path string) ValidatorOption {
 	return func(cfg *validatorConfig) {
+		if path == "" {
+			cfg.cacheDir = defaultValidatorCacheDir()
+			return
+		}
 		cfg.cacheDir = path
+	}
+}
+
+// WithTempCacheDir disables the persistent runtime cache.
+//
+// Validators using this option extract embedded runtime files into a temporary
+// runtime root that Close removes.
+func WithTempCacheDir() ValidatorOption {
+	return func(cfg *validatorConfig) {
+		cfg.cacheDir = ""
 	}
 }
 
@@ -68,8 +83,9 @@ type Validator struct {
 // NewValidator creates a concurrency-safe BagIt validator pool.
 //
 // The default pool size is 1. Embedded runtime files are cached under the
-// user's cache directory by default; use WithCacheDir to choose a different
-// location or to disable persistent caching.
+// user's cache directory by default. Omit WithCacheDir to use that default, use
+// WithCacheDir with a non-empty path to choose a different persistent cache
+// location, or use WithTempCacheDir to disable persistent caching.
 func NewValidator(opts ...ValidatorOption) (*Validator, error) {
 	cfg := validatorConfig{
 		poolSize: defaultValidatorPoolSize,

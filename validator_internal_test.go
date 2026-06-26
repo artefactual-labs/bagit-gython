@@ -13,7 +13,7 @@ import (
 )
 
 func TestValidatorSharesRuntimeRootAcrossPool(t *testing.T) {
-	v, err := NewValidator(WithPoolSize(4), WithCacheDir(""))
+	v, err := NewValidator(WithPoolSize(4), WithTempCacheDir())
 	assert.NilError(t, err)
 
 	dirs := validatorRuntimeDirs(v)
@@ -35,6 +35,28 @@ func TestValidatorSharesRuntimeRootAcrossPool(t *testing.T) {
 		_, err := os.Stat(dir)
 		assert.Assert(t, os.IsNotExist(err))
 	}
+}
+
+func TestValidatorEmptyCacheDirUsesDefault(t *testing.T) {
+	cacheHome := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", cacheHome)
+	} else {
+		t.Setenv("HOME", cacheHome)
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(cacheHome, ".cache"))
+	}
+
+	cacheDir := defaultValidatorCacheDir()
+	assert.Assert(t, cacheDir != "")
+
+	v, err := NewValidator(WithCacheDir(""))
+	assert.NilError(t, err)
+
+	dirs := validatorRuntimeDirs(v)
+	assert.DeepEqual(t, dirs, []string{cacheDir})
+
+	assert.NilError(t, v.Close())
+	assertPathExists(t, cacheDir)
 }
 
 func TestValidatorUsesPersistentCacheDir(t *testing.T) {
@@ -86,7 +108,7 @@ func TestValidatorRejectsUnsafeCacheDir(t *testing.T) {
 }
 
 func TestValidatorValidateContextHonorsWaitCancellation(t *testing.T) {
-	v, err := NewValidator(WithPoolSize(1), WithCacheDir(""))
+	v, err := NewValidator(WithPoolSize(1), WithTempCacheDir())
 	assert.NilError(t, err)
 	t.Cleanup(func() {
 		assert.NilError(t, v.Close())
@@ -103,7 +125,7 @@ func TestValidatorValidateContextHonorsWaitCancellation(t *testing.T) {
 }
 
 func TestValidatorTryValidateReturnsErrBusyWhenPoolBusy(t *testing.T) {
-	v, err := NewValidator(WithPoolSize(1), WithCacheDir(""))
+	v, err := NewValidator(WithPoolSize(1), WithTempCacheDir())
 	assert.NilError(t, err)
 	t.Cleanup(func() {
 		assert.NilError(t, v.Close())
