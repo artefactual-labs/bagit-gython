@@ -164,6 +164,22 @@ Memory use grows with the number of paths and the number of checks running
 concurrently. Run the check after staging finishes so the payload stays stable
 during the check.
 
+## Creating bags
+
+`BagIt.Make` creates a bag in place with SHA-256 and SHA-512 manifests. Use
+`MakeWithOptions` to choose the checksum algorithms for both the payload and tag
+manifests. Use lowercase names such as `sha512`, `sha256`, `sha1`, and `md5`.
+
+```go
+err := b.MakeWithOptions("/path/to/transfer", bagit.MakeOptions{
+    ChecksumAlgorithms: []string{"sha512"},
+})
+```
+
+Creation moves the directory contents into `data/`. A directory with no payload
+files gets an empty payload manifest for each selected algorithm and matching
+tag manifests.
+
 ## Supported architectures
 
 - darwin-amd64

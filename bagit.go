@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"unicode/utf8"
 
 	"github.com/artefactual-labs/bagit-gython/internal/dist/data"
 	"github.com/artefactual-labs/bagit-gython/internal/runner"
@@ -176,8 +177,18 @@ func (b *BagIt) Validate(path string) error {
 	return nil
 }
 
+// MakeOptions configures the manifests written when creating a bag.
+type MakeOptions struct {
+	// ChecksumAlgorithms selects the algorithms for the payload and tag
+	// manifests. Use lowercase, fixed-length checksum names supported by the
+	// embedded Python runtime, such as md5, sha1, sha256, and sha512. An empty
+	// list uses sha256 and sha512.
+	ChecksumAlgorithms []string
+}
+
 type makeRequest struct {
-	Path string `json:"path"`
+	Path      string   `json:"path"`
+	Checksums []string `json:"checksums,omitempty"`
 }
 
 type makeResponse struct {
@@ -185,9 +196,21 @@ type makeResponse struct {
 	Err     string `json:"err"`
 }
 
+// Make turns the directory at path into a BagIt bag in place with SHA-256 and
+// SHA-512 manifests.
 func (b *BagIt) Make(path string) error {
+	return b.MakeWithOptions(path, MakeOptions{})
+}
+
+// MakeWithOptions turns the directory at path into a BagIt bag in place with
+// the selected manifests. The directory path must be non-empty and valid UTF-8.
+func (b *BagIt) MakeWithOptions(path string, options MakeOptions) error {
+	if path == "" || !utf8.ValidString(path) {
+		return fmt.Errorf("make: bag path must be non-empty and valid UTF-8")
+	}
 	blob, err := b.send("make", &makeRequest{
-		Path: path,
+		Path:      path,
+		Checksums: options.ChecksumAlgorithms,
 	})
 	if err != nil {
 		return err
