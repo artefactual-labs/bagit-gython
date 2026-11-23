@@ -1,3 +1,4 @@
+import hashlib
 import json
 import multiprocessing
 import os
@@ -10,6 +11,8 @@ from itertools import zip_longest
 from typing import Any, Dict
 
 from bagit import (
+    CHECKSUM_ALGOS,
+    DEFAULT_CHECKSUMS,
     Bag,
     BagError,
     BagValidationError,
@@ -342,7 +345,38 @@ class Runner:
 
     def make_handler(self, args):
         bag_dir = args.pop("path")
+        checksums = args.get("checksum")
+        if checksums is None:
+            checksums = args.get("checksums")
+        if checksums is None:
+            checksums = DEFAULT_CHECKSUMS
+        if not checksums:
+            raise ValueError("At least one checksum algorithm is required")
+        # bagit-python can move the payload before discovering an unsupported hash.
+        for algorithm in checksums:
+            if algorithm not in CHECKSUM_ALGOS:
+                raise ValueError(f"Unsupported checksum algorithm: {algorithm!r}")
+            try:
+                hashlib.new(algorithm).hexdigest()
+            except (ValueError, TypeError) as err:
+                raise ValueError(
+                    f"Unsupported checksum algorithm: {algorithm!r}"
+                ) from err
+        if len(set(checksums)) != len(checksums):
+            raise ValueError("Duplicate checksum algorithms")
+
         bag = make_bag(bag_dir, **args)
+        if bag.info.get("Payload-Oxum") == "0.0" and not any(bag.manifest_files()):
+            # The upstream maker skips payload manifests when there are no files.
+            for algorithm in checksums:
+                with open(os.path.join(bag.path, f"manifest-{algorithm}.txt"), "xb"):
+                    pass
+            # Include the empty payload manifests in the tag manifests.
+            cwd = os.getcwd()
+            try:
+                bag.save()
+            finally:
+                os.chdir(cwd)
         return {"version": bag.version}
 
     def exit_handler(self, args):
