@@ -2,8 +2,19 @@ name: Tests
 on:
   pull_request:
   push:
+    branches:
+      - main
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify-actions-lock:
     name: Verify action lockfile
@@ -22,12 +33,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh actions-lock --verify
-  test:
-    name: Test
-    runs-on: ubuntu-latest
+  lint-workflows:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check workflows and Dependabot configuration
+        uses: jdx/jactionlint@v2.6.0
+        with:
+          strict-exit: "true"
+  test:
+    name: Test
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Go
         uses: actions/setup-go@v7.1.0
         with:
@@ -36,10 +63,13 @@ jobs:
         run: go test -v -race ./...
   mod:
     name: Check that `go mod tidy` is clean
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Go
         uses: actions/setup-go@v7.1.0
         with:
