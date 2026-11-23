@@ -109,6 +109,10 @@ func (r *pyRunner) send(name string, args any) ([]byte, error) {
 		return nil, fmt.Errorf("write blob: %v", err)
 	}
 
+	if name == checkCompletenessCommand {
+		return readCompletenessReply(r.stdoutReader)
+	}
+
 	line := bytes.NewBuffer(nil)
 	for {
 		l, p, err := r.stdoutReader.ReadLine()
@@ -125,6 +129,33 @@ func (r *pyRunner) send(name string, args any) ([]byte, error) {
 	}
 
 	return line.Bytes(), nil
+}
+
+func readCompletenessReply(reader *bufio.Reader) ([]byte, error) {
+	var line []byte
+	tooLarge := false
+	for {
+		part, err := reader.ReadSlice('\n')
+		if len(line)+len(part) > maxCompletenessReplyBytes {
+			tooLarge = true
+		}
+		if !tooLarge {
+			line = append(line, part...)
+		}
+
+		switch err {
+		case nil:
+			if tooLarge {
+				return nil, fmt.Errorf("read completeness response: reply exceeds %d bytes", maxCompletenessReplyBytes)
+			}
+			return line[:len(line)-1], nil
+		case bufio.ErrBufferFull:
+			// Drain oversized replies to keep the runner aligned at the next line.
+			continue
+		default:
+			return nil, fmt.Errorf("read completeness response: %w", err)
+		}
+	}
 }
 
 // quit requests the runner to exit gracefully.
