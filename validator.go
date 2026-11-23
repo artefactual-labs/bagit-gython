@@ -152,6 +152,22 @@ func (v *Validator) Validate(path string) error {
 // The context controls waiting for an available runner. Once a runner has been
 // acquired, the validation runs to completion.
 func (v *Validator) ValidateContext(ctx context.Context, path string) error {
+	return v.checkWithContext(ctx, path, (*BagIt).Validate)
+}
+
+// CheckCompleteness checks path without verifying checksums. It waits for an
+// available runner and returns a *CompletenessError for an invalid bag.
+func (v *Validator) CheckCompleteness(path string) error {
+	return v.CheckCompletenessContext(context.Background(), path)
+}
+
+// CheckCompletenessContext checks path without verifying checksums. The context
+// controls waiting for a runner. Once acquired, the check runs to completion.
+func (v *Validator) CheckCompletenessContext(ctx context.Context, path string) error {
+	return v.checkWithContext(ctx, path, (*BagIt).CheckCompleteness)
+}
+
+func (v *Validator) checkWithContext(ctx context.Context, path string, check func(*BagIt, string) error) error {
 	if v == nil {
 		return ErrClosed
 	}
@@ -163,22 +179,7 @@ func (v *Validator) ValidateContext(ctx context.Context, path string) error {
 		return err
 	}
 
-	if err := v.ensureBootstrapped(); err != nil {
-		v.sem.Release(1)
-		return err
-	}
-
-	b, err := v.take()
-	if err != nil {
-		v.sem.Release(1)
-		return err
-	}
-	defer func() {
-		v.put(b)
-		v.sem.Release(1)
-	}()
-
-	return b.Validate(path)
+	return v.checkWithAcquiredSlot(path, check)
 }
 
 // TryValidate validates path with a pooled BagIt runner if one is immediately
@@ -194,22 +195,23 @@ func (v *Validator) TryValidate(path string) error {
 		return err
 	}
 
+	return v.checkWithAcquiredSlot(path, (*BagIt).Validate)
+}
+
+func (v *Validator) checkWithAcquiredSlot(path string, check func(*BagIt, string) error) error {
+	defer v.sem.Release(1)
+
 	if err := v.ensureBootstrapped(); err != nil {
-		v.sem.Release(1)
 		return err
 	}
 
 	b, err := v.take()
 	if err != nil {
-		v.sem.Release(1)
 		return err
 	}
-	defer func() {
-		v.put(b)
-		v.sem.Release(1)
-	}()
+	defer v.put(b)
 
-	return b.Validate(path)
+	return check(b, path)
 }
 
 // Close releases all embedded Python resources owned by v.

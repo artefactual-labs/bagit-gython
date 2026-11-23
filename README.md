@@ -122,6 +122,48 @@ bag with either API:
     $ go run . -api bagit -validate ../internal/testdata/valid-bag
     Valid!
 
+## Completeness checks
+
+Use `Validate` when you need to verify checksums. Use `CheckCompleteness` on a
+`BagIt` or `Validator` to check a staged bag's structure and manifest membership
+without reading payload contents or changing files. The check also verifies
+`Payload-Oxum` when present. A content change that preserves the filename and
+size can pass completeness and fail checksum verification.
+
+Use `CheckCompletenessContext` on a pool when the wait for a runner should
+respect cancellation or a deadline. Once a runner is acquired, the check runs to
+completion. The same pool can handle both kinds of validation.
+
+`errors.Is(err, bagit.ErrInvalid)` identifies an invalid bag. Use `errors.As` to
+read the summary and any missing or unexpected paths. I/O and runner failures
+are returned as execution errors.
+
+```go
+if err := validator.CheckCompletenessContext(ctx, stagedPath); err != nil {
+    var invalid *bagit.CompletenessError
+    if errors.As(err, &invalid) && invalid.Differences != nil {
+        diff := invalid.Differences
+        log.Printf("%d missing, %d unexpected", diff.Missing, diff.Unexpected)
+        for _, example := range diff.Examples {
+            log.Printf("%s %q", example.Kind, example.Path)
+        }
+    }
+    return err
+}
+```
+
+The counts are exact when a comparison is available. A failure includes at most
+ten example paths. A missing bag declaration, for example, can prevent a
+comparison, in which case `Differences` is `nil`.
+
+For BagIt 1.0, a payload file omitted from any payload manifest is reported as
+unexpected. Older bags can list a payload file in any payload manifest.
+
+The runner keeps manifest and filesystem names in memory to compare membership.
+Memory use grows with the number of paths and the number of checks running
+concurrently. Run the check after staging finishes so the payload stays stable
+during the check.
+
 ## Supported architectures
 
 - darwin-amd64

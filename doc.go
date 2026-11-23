@@ -21,6 +21,12 @@
 // lets callers cancel that wait, and Validator.TryValidate returns ErrBusy
 // immediately when no runner is available.
 //
+// Validate verifies checksums. BagIt.CheckCompleteness and
+// Validator.CheckCompleteness check the bag structure and manifest membership
+// without verifying checksums. Validator.CheckCompletenessContext controls the
+// wait for a runner. A CompletenessError wraps ErrInvalid and can include counts
+// and examples of missing and unexpected paths.
+//
 // By default, Validator caches extracted runtime files below the user's cache
 // directory in "bagit-gython" so later validators and process starts can reuse
 // them. Omit WithCacheDir to use that default. Use WithCacheDir with a non-empty
