@@ -183,6 +183,18 @@ func (b *BagIt) validate(path string, hashWorkers int) error {
 	return nil
 }
 
+// ValidateStrict checks the bag's structure and manifest membership before
+// verifying all listed checksums. Format and completeness failures return a
+// *CompletenessError. A checksum mismatch wraps ErrInvalid. The bag path must
+// be valid UTF-8.
+func (b *BagIt) ValidateStrict(path string) error {
+	return b.validateStrict(path, runtime.GOMAXPROCS(0))
+}
+
+func (b *BagIt) validateStrict(path string, hashWorkers int) error {
+	return b.checkBag(validateStrictCommand, path, hashWorkers)
+}
+
 // MakeOptions configures the manifests written when creating a bag.
 type MakeOptions struct {
 	// ChecksumAlgorithms selects the algorithms for the payload and tag

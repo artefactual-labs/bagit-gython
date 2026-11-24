@@ -11,9 +11,13 @@ import (
 
 const (
 	checkCompletenessCommand  = "check_completeness"
+	validateStrictCommand     = "validate_strict"
 	maxCompletenessReplyBytes = 16 * 1024
 	maxCompletenessExamples   = 10
 )
+
+// A checksum mismatch needs room for a full JSON-escaped Windows long path.
+const maxStrictReplyBytes = 256 * 1024
 
 // DifferenceKind identifies how a path differs from the bag's manifests.
 type DifferenceKind string
@@ -69,17 +73,31 @@ func (e *CompletenessError) Unwrap() error { return ErrInvalid }
 // for an invalid bag. I/O and runner failures return separate errors.
 // The bag path must be valid UTF-8.
 func (b *BagIt) CheckCompleteness(path string) error {
+	return b.checkBag(checkCompletenessCommand, path, 0)
+}
+
+func (b *BagIt) checkBag(command, path string, hashWorkers int) error {
 	if !utf8.ValidString(path) {
-		return fmt.Errorf("check completeness: bag path must be valid UTF-8")
+		operation, _ := checkLabels(command)
+		return fmt.Errorf("%s: bag path must be valid UTF-8", operation)
 	}
-	blob, err := b.send(checkCompletenessCommand, &validateRequest{Path: path})
+	blob, err := b.send(command, &validateRequest{Path: path, HashWorkers: hashWorkers})
 	if err != nil {
 		return err
 	}
-	return decodeCompletenessResponse(blob)
+	return decodeCheckResponse(command, blob)
 }
 
-func decodeCompletenessResponse(blob []byte) error {
+func checkLabels(command string) (operation, response string) {
+	if command == validateStrictCommand {
+		return "validate strict", "strict validation"
+	}
+	return "check completeness", "completeness"
+}
+
+func decodeCheckResponse(command string, blob []byte) error {
+	operation, response := checkLabels(command)
+	decode := "decode " + response + " response"
 	var reply struct {
 		Status      string          `json:"status"`
 		Message     json.RawMessage `json:"message"`
@@ -87,39 +105,51 @@ func decodeCompletenessResponse(blob []byte) error {
 		LegacyType  json.RawMessage `json:"type"`
 	}
 	if err := json.Unmarshal(blob, &reply); err != nil {
-		return fmt.Errorf("decode completeness response: %w", err)
+		return fmt.Errorf("%s: %w", decode, err)
+	}
+	isMismatch := reply.Status == "checksum_mismatch"
+	if isMismatch && command != validateStrictCommand {
+		return fmt.Errorf("%s: unknown status %q", decode, reply.Status)
+	}
+	if !isMismatch && len(blob)+1 > maxCompletenessReplyBytes {
+		return fmt.Errorf("%s: reply exceeds %d bytes", decode, maxCompletenessReplyBytes)
+	}
+
+	var message string
+	switch reply.Status {
+	case "invalid", "error", "checksum_mismatch":
+		if json.Unmarshal(reply.Message, &message) != nil || message == "" {
+			return fmt.Errorf("%s: %s status requires a message", decode, reply.Status)
+		}
+	}
+	if (reply.Status == "error" || isMismatch) && reply.Differences != nil {
+		return fmt.Errorf("%s: %s status with path differences", decode, reply.Status)
 	}
 
 	switch reply.Status {
 	case "complete":
 		if reply.Message != nil || reply.Differences != nil {
-			return fmt.Errorf("decode completeness response: complete status with failure details")
+			return fmt.Errorf("%s: complete status with failure details", decode)
 		}
 		return nil
-	case "invalid", "error":
-		var message string
-		if json.Unmarshal(reply.Message, &message) != nil || message == "" {
-			return fmt.Errorf("decode completeness response: %s status requires a message", reply.Status)
-		}
-		if reply.Status == "error" {
-			if reply.Differences != nil {
-				return fmt.Errorf("decode completeness response: error status with path differences")
-			}
-			return fmt.Errorf("check completeness: %s", message)
-		}
+	case "invalid":
 		differences, err := decodeFileDifferences(reply.Differences)
 		if err != nil {
-			return fmt.Errorf("decode completeness response: %w", err)
+			return fmt.Errorf("%s: %w", decode, err)
 		}
 		return &CompletenessError{Summary: message, Differences: differences}
+	case "error":
+		return fmt.Errorf("%s: %s", operation, message)
+	case "checksum_mismatch":
+		return fmt.Errorf("%w: %s", ErrInvalid, message)
 	case "":
 		var legacyType string
 		if json.Unmarshal(reply.LegacyType, &legacyType) == nil && legacyType == "UnknownCommandError" {
-			return fmt.Errorf("check completeness: incompatible Python runner does not support %s", checkCompletenessCommand)
+			return fmt.Errorf("%s: incompatible Python runner does not support %s", operation, command)
 		}
-		return fmt.Errorf("decode completeness response: missing status")
+		return fmt.Errorf("%s: missing status", decode)
 	default:
-		return fmt.Errorf("decode completeness response: unknown status %q", reply.Status)
+		return fmt.Errorf("%s: unknown status %q", decode, reply.Status)
 	}
 }
 

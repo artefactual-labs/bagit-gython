@@ -222,6 +222,7 @@ func TestValidatorValidateContextHonorsWaitCancellation(t *testing.T) {
 
 	err = v.ValidateContext(ctx, "internal/testdata/valid-bag")
 	assert.ErrorIs(t, err, context.Canceled)
+	assert.ErrorIs(t, v.ValidateStrictContext(ctx, "internal/testdata/valid-bag"), context.Canceled)
 }
 
 func TestValidatorTryValidateReturnsErrBusyWhenPoolBusy(t *testing.T) {

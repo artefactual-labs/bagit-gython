@@ -1,15 +1,18 @@
 import hashlib
 import json
+import logging
 import os
 import stat
 import sys
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from heapq import nsmallest
 from itertools import zip_longest
 from typing import Any, Dict
 
+import bagit
 from bagit import (
     CHECKSUM_ALGOS,
     DEFAULT_CHECKSUMS,
@@ -19,6 +22,7 @@ from bagit import (
     ChecksumMismatch,
     FileNormalizationConflict,
     _calc_hashes,
+    _calculate_file_hashes,
     make_bag,
     normalize_unicode,
 )
@@ -84,6 +88,17 @@ class ManifestReader(Bag):
         return ()
 
 
+@contextmanager
+def hash_results(calculate, args, workers):
+    if workers <= 1:
+        yield map(calculate, args)
+        return
+
+    # hashlib releases the GIL when hashing the blocks read by bagit-python.
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        yield executor.map(calculate, args, buffersize=2 * workers)
+
+
 class ChecksumBag(Bag):
     def _load_manifests(self):
         self._loading_manifests = True
@@ -108,13 +123,7 @@ class ChecksumBag(Bag):
             )
             for path, hashes in self.entries.items()
         )
-        if workers <= 1:
-            self._check_hash_results(map(_calc_hashes, args))
-            return
-
-        # hashlib releases the GIL when hashing the blocks read by bagit-python.
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            results = executor.map(_calc_hashes, args, buffersize=2 * workers)
+        with hash_results(_calc_hashes, args, workers) as results:
             self._check_hash_results(results)
 
     def _check_hash_results(self, results):
@@ -130,6 +139,8 @@ class ChecksumBag(Bag):
 
 class CompletenessBag(Bag):
     """Check one staged bag with Bag's parsing and comparison rules."""
+
+    retain_digests = False
 
     def _open(self):
         self._payload_scanned = False
@@ -180,6 +191,20 @@ class CompletenessBag(Bag):
                 if stat.S_ISREG(path_mode(path)):
                     yield path
 
+    def _manifest_paths(self, filename):
+        entries = ManifestReader(self, filename).entries
+        if not self.retain_digests:
+            yield from entries
+            return
+
+        # The upstream parser's algorithm key can depend on the parent
+        # directory. Take the only digest for each path and use the basename.
+        algorithm = os.path.basename(filename).partition("-")[2].removesuffix(".txt")
+        for path, digests in entries.items():
+            expected = self.entries.setdefault(path, {})
+            expected[algorithm] = next(iter(digests.values()))
+            yield path
+
     def _load_manifests(self):
         payload_prefix = "data" + os.sep
         self._payload_names = {}
@@ -187,7 +212,7 @@ class CompletenessBag(Bag):
         listings = Counter()
         manifests = list(self.manifest_files())
         for filename in manifests:
-            for path in ManifestReader(self, filename).entries:
+            for path in self._manifest_paths(filename):
                 if not path.startswith(payload_prefix):
                     raise BagError(f"Payload manifest lists a tag path {path!r}")
                 name = remember_path(self._payload_names, path)
@@ -199,9 +224,9 @@ class CompletenessBag(Bag):
                 name for name, count in listings.items() if count < len(manifests)
             }
 
-        if self.version_info >= (0, 97):
+        if self.retain_digests or self.version_info >= (0, 97):
             for filename in self.tagmanifest_files():
-                for path in ManifestReader(self, filename).entries:
+                for path in self._manifest_paths(filename):
                     if path.startswith(payload_prefix):
                         raise BagError(f"Tag manifest lists a payload path {path!r}")
                     remember_path(self._tag_names, path)
@@ -285,6 +310,77 @@ class CompletenessBag(Bag):
         self._payload_scanned = True
 
 
+class StrictManifestLogger(logging.LoggerAdapter):
+    def error(self, msg, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], dict):
+            fields = args[0]
+            reader = fields.get("bag")
+            if isinstance(reader, ManifestReader) and "line" in fields:
+                filename = os.path.basename(reader.filename)
+                raise BagError(
+                    f"Missing filename in {filename!r} for entry {fields['line']!r}"
+                )
+        super().error(msg, *args, **kwargs)
+
+
+class StrictBag(CompletenessBag):
+    retain_digests = True
+
+    def _load_manifests(self):
+        # bagit-python reports a skipped record only through LOGGER.error.
+        # Parsing is serial in each runner. Translate that diagnostic before
+        # log-level filtering and restore the logger before checksum work.
+        logger = bagit.LOGGER
+        bagit.LOGGER = StrictManifestLogger(logger, {})
+        try:
+            super()._load_manifests()
+        finally:
+            bagit.LOGGER = logger
+
+    def _validate_entries(self, processes):
+        workers = min(processes, len(self.entries))
+        args = (
+            (
+                self.path,
+                self.normalized_filesystem_names.get(normalize_unicode(path), path),
+                expected,
+            )
+            for path, expected in self.entries.items()
+        )
+        with hash_results(calculate_strict_hashes, args, workers) as results:
+            for path, computed, expected in results:
+                for algorithm, stored in expected.items():
+                    digest = computed.get(algorithm)
+                    if digest is None:
+                        raise ValueError(
+                            f"Could not verify {algorithm!r} checksum for {path!r}"
+                        )
+                    if stored.lower() != digest:
+                        raise ChecksumMismatch(path, algorithm, stored, digest)
+
+
+def calculate_strict_hashes(args):
+    bag_path, path, expected = args
+    hashers = {}
+    for algorithm in expected:
+        try:
+            hasher = hashlib.new(algorithm)
+            if not hasher.digest_size:
+                raise ValueError("expected a fixed-length digest")
+        except (TypeError, ValueError) as err:
+            raise ValueError(
+                f"Could not verify {algorithm!r} checksum for {path!r}: {err}"
+            ) from err
+        hashers[algorithm] = hasher
+
+    try:
+        computed = _calculate_file_hashes(os.path.join(bag_path, path), hashers)
+    except BagValidationError as err:
+        # bagit-python wraps open and read failures in BagValidationError.
+        raise OSError(err.message) from err
+    return path, computed, expected
+
+
 def completeness_failure(status, message):
     if len(message) > MAX_COMPLETENESS_MESSAGE_CHARS:
         message = message[: MAX_COMPLETENESS_MESSAGE_CHARS - 1] + "…"
@@ -338,7 +434,7 @@ def add_completeness_differences(reply, missing, unexpected):
 
 
 class Runner:
-    ALLOWED_COMMANDS = ("validate", "check_completeness", "make", "exit")
+    ALLOWED_COMMANDS = ("validate", "validate_strict", "check_completeness", "make", "exit")
     ALLOWED_COMMANDS_LIST = ", ".join(ALLOWED_COMMANDS)
 
     def __init__(self, cmd, stdout):
@@ -377,12 +473,27 @@ class Runner:
         return {"valid": True}
 
     def check_completeness_handler(self, args):
+        return self.check_bag(args, strict=False)
+
+    def validate_strict_handler(self, args):
+        return self.check_bag(args, strict=True)
+
+    def check_bag(self, args, *, strict):
         try:
             path = args["path"]
             if not isinstance(path, str) or not path:
                 return completeness_failure("error", "A bag directory path is required")
-            bag = CompletenessBag(path)
-            bag.validate(completeness_only=True)
+            if strict:
+                bag = StrictBag(path)
+                bag.validate(processes=args.get("hash_workers", 1))
+            else:
+                bag = CompletenessBag(path)
+                bag.validate(completeness_only=True)
+        except ChecksumMismatch as err:
+            return {
+                "status": "checksum_mismatch",
+                "message": f"{err.algorithm} checksum mismatch for {err.path!r}",
+            }
         except CompletenessValidationError as err:
             reply = completeness_failure("invalid", err.message)
             if err.differences is not None:

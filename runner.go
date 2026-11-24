@@ -109,8 +109,17 @@ func (r *pyRunner) send(name string, args any) ([]byte, error) {
 		return nil, fmt.Errorf("write blob: %v", err)
 	}
 
-	if name == checkCompletenessCommand {
-		return readCompletenessReply(r.stdoutReader)
+	if name == checkCompletenessCommand || name == validateStrictCommand {
+		limit := maxCompletenessReplyBytes
+		if name == validateStrictCommand {
+			limit = maxStrictReplyBytes
+		}
+		reply, err := readBoundedReply(r.stdoutReader, limit)
+		if err != nil {
+			_, response := checkLabels(name)
+			return nil, fmt.Errorf("read %s response: %w", response, err)
+		}
+		return reply, nil
 	}
 
 	line := bytes.NewBuffer(nil)
@@ -131,12 +140,12 @@ func (r *pyRunner) send(name string, args any) ([]byte, error) {
 	return line.Bytes(), nil
 }
 
-func readCompletenessReply(reader *bufio.Reader) ([]byte, error) {
+func readBoundedReply(reader *bufio.Reader, limit int) ([]byte, error) {
 	var line []byte
 	tooLarge := false
 	for {
 		part, err := reader.ReadSlice('\n')
-		if len(line)+len(part) > maxCompletenessReplyBytes {
+		if len(line)+len(part) > limit {
 			tooLarge = true
 		}
 		if !tooLarge {
@@ -146,14 +155,14 @@ func readCompletenessReply(reader *bufio.Reader) ([]byte, error) {
 		switch err {
 		case nil:
 			if tooLarge {
-				return nil, fmt.Errorf("read completeness response: reply exceeds %d bytes", maxCompletenessReplyBytes)
+				return nil, fmt.Errorf("reply exceeds %d bytes", limit)
 			}
 			return line[:len(line)-1], nil
 		case bufio.ErrBufferFull:
 			// Drain oversized replies to keep the runner aligned at the next line.
 			continue
 		default:
-			return nil, fmt.Errorf("read completeness response: %w", err)
+			return nil, err
 		}
 	}
 }

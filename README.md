@@ -128,22 +128,38 @@ bag with either API:
 
 ## Completeness checks
 
-Use `Validate` when you need to verify checksums. Use `CheckCompleteness` on a
-`BagIt` or `Validator` to check a staged bag's structure and manifest membership
-without reading payload contents or changing files. The check also verifies
-`Payload-Oxum` when present. A content change that preserves the filename and
-size can pass completeness and fail checksum verification.
+Both `BagIt` and `Validator` offer three ways to check a bag.
 
-Use `CheckCompletenessContext` on a pool when the wait for a runner should
-respect cancellation or a deadline. Once a runner is acquired, the check runs to
-completion. The same pool can handle both kinds of validation.
+- Use `CheckCompleteness` to find missing or unexpected files by comparing
+  filenames on disk with the manifests. It also checks the bag's structure and
+  verifies `Payload-Oxum` when present. A changed file can pass if its size
+  stays the same.
+- Use `Validate` for bagit-python's usual checksum validation. It compares the
+  payload against the combined entries from the payload manifests.
+- Use `ValidateStrict` when you need both checks. In one runner request it
+  checks completeness first, then verifies the recorded checksums for payload
+  files and listed tag files. A checksum entry without a filename is a format
+  error.
 
-`errors.Is(err, bagit.ErrInvalid)` identifies an invalid bag. Use `errors.As` to
-read the summary and any missing or unexpected paths. I/O and runner failures
-are returned as execution errors.
+For example, suppose a BagIt 1.0 bag has two payload files. Its SHA-256 manifest
+lists both, its SHA-512 manifest lists only the first, and all recorded
+checksums match. `Validate` passes. Both `CheckCompleteness` and
+`ValidateStrict` report the second file as unexpected because each payload
+manifest must list both files. BagIt 0.97 allows this partial listing, so
+`ValidateStrict` passes the same example for that version.
+
+On a pool, `CheckCompletenessContext` and `ValidateStrictContext` let callers
+cancel the wait for a runner. Once acquired, that runner finishes the request.
+
+For `CheckCompleteness` and `ValidateStrict`, use
+`errors.Is(err, bagit.ErrInvalid)` to distinguish an invalid bag from an I/O or
+runner failure. Use `errors.As` to retrieve a `*bagit.CompletenessError` with
+the summary and any missing or unexpected paths. A strict checksum mismatch
+identifies the file and algorithm. If the runner cannot compute a recorded
+digest, `ValidateStrict` returns an execution error.
 
 ```go
-if err := validator.CheckCompletenessContext(ctx, stagedPath); err != nil {
+if err := validator.CheckCompletenessContext(ctx, bagPath); err != nil {
     var invalid *bagit.CompletenessError
     if errors.As(err, &invalid) && invalid.Differences != nil {
         diff := invalid.Differences
@@ -160,13 +176,10 @@ The counts are exact when a comparison is available. A failure includes at most
 ten example paths. A missing bag declaration, for example, can prevent a
 comparison, in which case `Differences` is `nil`.
 
-For BagIt 1.0, a payload file omitted from any payload manifest is reported as
-unexpected. Older bags can list a payload file in any payload manifest.
-
 The runner keeps manifest and filesystem names in memory to compare membership.
-Memory use grows with the number of paths and the number of checks running
-concurrently. Run the check after staging finishes so the payload stays stable
-during the check.
+Strict validation also keeps the recorded digests until it can verify them.
+Memory use grows with the number of paths and the number of concurrent checks.
+If you're copying or updating the bag, let that finish before validating it.
 
 ## Creating bags
 
