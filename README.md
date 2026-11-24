@@ -203,6 +203,32 @@ release, we are using a commit from the main branch that includes compatibility
 fixes for recent Python releases. This commit has not yet been included in an
 official release.
 
+## Performance and compatibility
+
+These are medians of seven runs on an Apple M4 Max with local APFS, one warm
+Python runner, `GOMAXPROCS=4`, and SHA-256 and SHA-512. `Make` starts with a
+populated source directory. The Go reference reads the same files and compares
+checksums against digests already in memory.
+
+| Payload                               | `Make` | `CheckCompleteness` | `Validate` | Go checksum only |
+| ------------------------------------- | -----: | ------------------: | ---------: | ---------------: |
+| 20,000 × 128 B across 200 directories | 1.97 s |              729 ms |     1.40 s |           108 ms |
+| 1 × 256 MiB                           | 232 ms |             0.60 ms |     231 ms |           234 ms |
+| 4 × 64 MiB                            | 233 ms |             0.66 ms |      66 ms |            66 ms |
+
+Full validation was close to the Go checksum reference on the large-file bags.
+For checksum verification, bagit-python reads each file once and uses native
+hash implementations. It can hash multiple files in parallel during validation.
+`Make` hashes files serially and reloads the manifests after writing them. On
+the tiny-file bag, a separate profile measured about 650 ms to load manifests in
+either check and 1.2 s to reload them in `Make`.
+
+Bags with many tiny files are the strongest case for a Go port because manifest
+parsing, path resolution, and other per-file work add up. For now, wrapping
+[bagit-python] keeps creation, completeness checks, and validation close to the
+behavior Artefactual already relies on in several projects, including how
+bagit-python handles legacy bags and filenames.
+
 ## Acknowledgement
 
 * bagit-python project: https://github.com/LibraryOfCongress/bagit-python
