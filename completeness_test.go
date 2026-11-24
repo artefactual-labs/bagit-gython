@@ -279,6 +279,7 @@ func TestCompletenessBoundsAndOrdersExamples(t *testing.T) {
 	for range 3 {
 		assert.DeepEqual(t, requireIncomplete(t, b.CheckCompleteness(path)).Differences, want)
 	}
+	assert.DeepEqual(t, requireIncomplete(t, b.ValidateStrict(path)).Differences, want)
 
 	// JSON escapes this path to more than the entire reply budget.
 	longDir := "data/a/" + strings.Repeat(strings.Repeat("😀", 50)+"/", 35)

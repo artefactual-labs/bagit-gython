@@ -156,6 +156,19 @@ func (v *Validator) ValidateContext(ctx context.Context, path string) error {
 	return v.checkWithContext(ctx, path, v.validate)
 }
 
+// ValidateStrict checks the bag's structure and manifest membership before
+// verifying all listed checksums. It waits for an available runner.
+func (v *Validator) ValidateStrict(path string) error {
+	return v.ValidateStrictContext(context.Background(), path)
+}
+
+// ValidateStrictContext runs strict validation with a pooled BagIt runner.
+// The context controls waiting for a runner. Once acquired, the validation
+// runs to completion.
+func (v *Validator) ValidateStrictContext(ctx context.Context, path string) error {
+	return v.checkWithContext(ctx, path, v.validateStrict)
+}
+
 // CheckCompleteness checks path without verifying checksums. It waits for an
 // available runner and returns a *CompletenessError for an invalid bag.
 func (v *Validator) CheckCompleteness(path string) error {
@@ -200,8 +213,15 @@ func (v *Validator) TryValidate(path string) error {
 }
 
 func (v *Validator) validate(b *BagIt, path string) error {
-	workers := max(1, runtime.GOMAXPROCS(0)/int(v.poolSize))
-	return b.validate(path, workers)
+	return b.validate(path, v.hashWorkers())
+}
+
+func (v *Validator) validateStrict(b *BagIt, path string) error {
+	return b.validateStrict(path, v.hashWorkers())
+}
+
+func (v *Validator) hashWorkers() int {
+	return max(1, runtime.GOMAXPROCS(0)/int(v.poolSize))
 }
 
 func (v *Validator) checkWithAcquiredSlot(path string, check func(*BagIt, string) error) error {

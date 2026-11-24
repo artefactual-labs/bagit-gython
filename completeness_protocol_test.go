@@ -15,11 +15,12 @@ import (
 )
 
 func TestDecodeCompletenessResponse(t *testing.T) {
-	assert.NilError(t, decodeCompletenessResponse([]byte(`{"status":"complete","future":true}`)))
+	assert.NilError(t, decodeCheckResponse(checkCompletenessCommand, []byte(`{"status":"complete","future":true}`)))
 	for _, test := range []struct{ name, reply, want string }{
 		{"old runner", `{"err":"'check_completeness' is not a valid command, use: validate, make, exit","type":"UnknownCommandError"}`, "incompatible Python runner"},
 		{"old success", `{"valid":true}`, "missing status"},
 		{"unknown status", `{"status":"valid"}`, "unknown status"},
+		{"checksum result", `{"status":"checksum_mismatch","message":"Mismatch"}`, "unknown status"},
 		{"truncated JSON", `{"status":"complete"`, "decode completeness response"},
 		{"wrong status type", `{"status":true}`, "decode completeness response"},
 		{"invalid without message", `{"status":"invalid"}`, "requires a message"},
@@ -34,7 +35,7 @@ func TestDecodeCompletenessResponse(t *testing.T) {
 		{"unknown kind", `{"status":"invalid","message":"Incomplete","differences":{"missing":1,"unexpected":0,"examples":[{"kind":"extra","path":"x"}]}}`, "inconsistent path difference"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := decodeCompletenessResponse([]byte(test.reply))
+			err := decodeCheckResponse(checkCompletenessCommand, []byte(test.reply))
 			assert.ErrorContains(t, err, test.want)
 			assert.Assert(t, !errors.Is(err, ErrInvalid))
 		})
@@ -44,14 +45,44 @@ func TestDecodeCompletenessResponse(t *testing.T) {
 func TestCompletenessReplyFraming(t *testing.T) {
 	replies := strings.Repeat("x", maxCompletenessReplyBytes) + "\n" + `{"status":"complete"}` + "\r\n"
 	reader := bufio.NewReader(strings.NewReader(replies))
-	_, err := readCompletenessReply(reader)
+	_, err := readBoundedReply(reader, maxCompletenessReplyBytes)
 	assert.ErrorContains(t, err, "reply exceeds")
-	blob, err := readCompletenessReply(reader)
+	blob, err := readBoundedReply(reader, maxCompletenessReplyBytes)
 	assert.NilError(t, err)
-	assert.NilError(t, decodeCompletenessResponse(blob))
+	assert.NilError(t, decodeCheckResponse(checkCompletenessCommand, blob))
 
-	_, err = readCompletenessReply(bufio.NewReader(strings.NewReader(`{"status":"complete"}`)))
+	_, err = readBoundedReply(bufio.NewReader(strings.NewReader(`{"status":"complete"}`)), maxCompletenessReplyBytes)
 	assert.ErrorContains(t, err, "EOF")
+}
+
+func TestStrictReplyFramingPreservesLongChecksumPath(t *testing.T) {
+	const prefix = "sha512 checksum mismatch for '"
+	const filename = "file.txt"
+	const depth = 150
+	directory := strings.Repeat("界", 200) + `\\`
+	escapedDirectory := strings.Repeat(`\u754c`, 200) + `\\\\`
+	message := prefix + strings.Repeat(escapedDirectory, depth) + filename + "'"
+	mismatch := `{"status":"checksum_mismatch","message":"` + message + `"}`
+	invalid := `{"status":"invalid","message":"` + message + `"}`
+	replies := strings.Repeat("x", maxStrictReplyBytes) + "\n" + mismatch + "\r\n" + invalid + "\r\n"
+	reader := bufio.NewReader(strings.NewReader(replies))
+	_, err := readBoundedReply(reader, maxStrictReplyBytes)
+	assert.ErrorContains(t, err, "reply exceeds")
+
+	blob, err := readBoundedReply(reader, maxStrictReplyBytes)
+	assert.NilError(t, err)
+	err = decodeCheckResponse(validateStrictCommand, blob)
+	assert.ErrorIs(t, err, ErrInvalid)
+	want := "invalid: " + prefix + strings.Repeat(directory, depth) + filename + "'"
+	if got := err.Error(); got != want {
+		t.Fatalf("checksum mismatch altered the path, got %d bytes, want %d", len(got), len(want))
+	}
+
+	blob, err = readBoundedReply(reader, maxStrictReplyBytes)
+	assert.NilError(t, err)
+	err = decodeCheckResponse(validateStrictCommand, blob)
+	assert.ErrorContains(t, err, "reply exceeds 16384 bytes")
+	assert.Assert(t, !errors.Is(err, ErrInvalid))
 }
 
 func TestCompletenessRunnerStartupFailureReleasesSlot(t *testing.T) {

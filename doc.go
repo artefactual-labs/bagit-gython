@@ -23,9 +23,11 @@
 //
 // Validate verifies checksums. BagIt.CheckCompleteness and
 // Validator.CheckCompleteness check the bag structure and manifest membership
-// without verifying checksums. Validator.CheckCompletenessContext controls the
-// wait for a runner. A CompletenessError wraps ErrInvalid and can include counts
-// and examples of missing and unexpected paths.
+// without verifying checksums. ValidateStrict runs those checks first, then
+// verifies checksums for payload files and listed tag files in the same request.
+// Validator.CheckCompletenessContext and Validator.ValidateStrictContext let
+// callers cancel the wait for a runner. A CompletenessError wraps ErrInvalid
+// and can include counts and examples of missing and unexpected paths.
 //
 // By default, Validator caches extracted runtime files below the user's cache
 // directory in "bagit-gython" so later validators and process starts can reuse
