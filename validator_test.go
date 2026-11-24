@@ -2,12 +2,52 @@ package bagit_test
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/artefactual-labs/bagit-gython"
 	"golang.org/x/sync/errgroup"
 	"gotest.tools/v3/assert"
 )
+
+func TestPooledValidationChecksEveryChecksum(t *testing.T) {
+	previous := runtime.GOMAXPROCS(4)
+	t.Cleanup(func() { runtime.GOMAXPROCS(previous) })
+	v, err := bagit.NewValidator(bagit.WithPoolSize(2), bagit.WithCacheDir(t.TempDir()))
+	assert.NilError(t, err)
+	t.Cleanup(func() { assert.NilError(t, v.Close()) })
+
+	const badFile = "data/file-19"
+	contents := strings.Repeat("x", 4096)
+	var manifest strings.Builder
+	for i := range 20 {
+		manifest.WriteString(fileManifest(fmt.Sprintf("data/file-%02d", i), contents))
+	}
+	good := completenessBag(t, "1.0", manifest.String())
+	bad := completenessBag(t, "1.0", manifest.String())
+	for i := range 20 {
+		name := fmt.Sprintf("data/file-%02d", i)
+		writeBagFile(t, good, name, contents)
+		writeBagFile(t, bad, name, contents)
+	}
+	writeBagFile(t, bad, badFile, strings.Repeat("y", len(contents)))
+
+	var g errgroup.Group
+	for range 3 {
+		g.Go(func() error { return v.Validate(good) })
+		g.Go(func() error {
+			err := v.Validate(bad)
+			if !errors.Is(err, bagit.ErrInvalid) || !strings.Contains(err.Error(), filepath.FromSlash(badFile)+" sha256 validation failed") {
+				return fmt.Errorf("expected a checksum mismatch for %s, got %v", badFile, err)
+			}
+			return nil
+		})
+	}
+	assert.NilError(t, g.Wait())
+}
 
 func TestValidator(t *testing.T) {
 	t.Run("Validates bags concurrently", func(t *testing.T) {

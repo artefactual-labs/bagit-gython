@@ -1,10 +1,10 @@
 import hashlib
 import json
-import multiprocessing
 import os
 import stat
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from heapq import nsmallest
 from itertools import zip_longest
@@ -16,7 +16,9 @@ from bagit import (
     Bag,
     BagError,
     BagValidationError,
+    ChecksumMismatch,
     FileNormalizationConflict,
+    _calc_hashes,
     make_bag,
     normalize_unicode,
 )
@@ -80,6 +82,38 @@ class ManifestReader(Bag):
 
     def tagmanifest_files(self):
         return ()
+
+
+class ChecksumBag(Bag):
+    def _validate_entries(self, processes):
+        workers = min(processes, len(self.entries))
+        args = (
+            (
+                self.path,
+                self.normalized_filesystem_names.get(path, path),
+                hashes,
+                self.algorithms,
+            )
+            for path, hashes in self.entries.items()
+        )
+        if workers <= 1:
+            self._check_hash_results(map(_calc_hashes, args))
+            return
+
+        # hashlib releases the GIL when hashing the blocks read by bagit-python.
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = executor.map(_calc_hashes, args, buffersize=2 * workers)
+            self._check_hash_results(results)
+
+    def _check_hash_results(self, results):
+        errors = []
+        for path, computed, expected in results:
+            for algorithm, digest in computed.items():
+                stored = expected[algorithm].lower()
+                if stored != digest:
+                    errors.append(ChecksumMismatch(path, algorithm, stored, digest))
+        if errors:
+            raise BagValidationError("Bag validation failed", errors)
 
 
 class CompletenessBag(Bag):
@@ -318,8 +352,8 @@ class Runner:
         return handler
 
     def validate_handler(self, args):
-        bag = Bag(args.get("path"))
-        bag.validate(processes=multiprocessing.cpu_count())
+        bag = ChecksumBag(args.get("path"))
+        bag.validate(processes=args.get("hash_workers", 1))
         return {"valid": True}
 
     def check_completeness_handler(self, args):
