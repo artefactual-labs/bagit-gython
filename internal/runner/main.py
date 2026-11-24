@@ -74,7 +74,7 @@ class ManifestReader(Bag):
         self.filename = filename
         self.algorithms = []
         self.normalized_manifest_names = {}
-        self._path_is_dangerous = bag._path_is_dangerous
+        self._path_is_dangerous = bag._manifest_path_is_dangerous
         self._load_manifests()
 
     def manifest_files(self):
@@ -85,6 +85,18 @@ class ManifestReader(Bag):
 
 
 class ChecksumBag(Bag):
+    def _load_manifests(self):
+        self._loading_manifests = True
+        try:
+            super()._load_manifests()
+        finally:
+            self._loading_manifests = False
+
+    def _path_is_dangerous(self, path):
+        if self._loading_manifests and path in self.entries:
+            return False
+        return super()._path_is_dangerous(path)
+
     def _validate_entries(self, processes):
         workers = min(processes, len(self.entries))
         args = (
@@ -146,6 +158,14 @@ class CompletenessBag(Bag):
         except ValueError:
             # Invalid platform paths can fail realpath or commonpath.
             return True
+
+    def _manifest_path_is_dangerous(self, path):
+        # A filename already seen in another manifest passed the same check.
+        # Recheck a different spelling, even if it normalizes to the same name.
+        name = normalize_unicode(path)
+        if self._payload_names.get(name) == path or self._tag_names.get(name) == path:
+            return False
+        return self._path_is_dangerous(path)
 
     def manifest_files(self):
         return self._manifest_files("manifest")
@@ -243,22 +263,22 @@ class CompletenessBag(Bag):
     def payload_files(self):
         # os.walk can hide scan and entry errors. Keep its traversal semantics,
         # including following a symlink at data/ but skipping nested directory links.
-        pending = [os.path.join(self.path, "data")]
+        pending = ["data"]
         while pending:
+            directory = pending.pop()
             subdirs = []
-            with os.scandir(pending.pop()) as entries:
+            with os.scandir(os.path.join(self.path, directory)) as entries:
                 for entry in entries:
+                    path = os.path.join(directory, entry.name)
                     if entry.is_symlink():
                         mode = path_mode(entry.path)
                         if not mode:
-                            path = os.path.relpath(entry.path, self.path)
                             raise BagError(f"Dangling payload symlink {path!r}")
                         if stat.S_ISDIR(mode):
                             continue
                     elif entry.is_dir():
-                        subdirs.append(entry.path)
+                        subdirs.append(path)
                         continue
-                    path = os.path.relpath(entry.path, self.path)
                     remember_path(self.normalized_filesystem_names, path)
                     yield path
             pending.extend(reversed(subdirs))
