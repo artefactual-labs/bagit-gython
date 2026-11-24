@@ -11,9 +11,9 @@ require (
 )
 
 require (
-	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	github.com/gobwas/glob v1.1.0 // indirect
+	github.com/gofrs/flock v0.13.2 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/sirupsen/logrus v1.10.2 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 )
