@@ -146,7 +146,8 @@ func newBagIt(runtime *bagItRuntime, ownsRuntime bool) *BagIt {
 }
 
 type validateRequest struct {
-	Path string `json:"path"`
+	Path        string `json:"path"`
+	HashWorkers int    `json:"hash_workers,omitempty"`
 }
 
 type validateResponse struct {
@@ -155,8 +156,13 @@ type validateResponse struct {
 }
 
 func (b *BagIt) Validate(path string) error {
+	return b.validate(path, runtime.GOMAXPROCS(0))
+}
+
+func (b *BagIt) validate(path string, hashWorkers int) error {
 	blob, err := b.send("validate", &validateRequest{
-		Path: path,
+		Path:        path,
+		HashWorkers: hashWorkers,
 	})
 	if err != nil {
 		return err

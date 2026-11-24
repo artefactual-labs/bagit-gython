@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"golang.org/x/sync/semaphore"
@@ -152,7 +153,7 @@ func (v *Validator) Validate(path string) error {
 // The context controls waiting for an available runner. Once a runner has been
 // acquired, the validation runs to completion.
 func (v *Validator) ValidateContext(ctx context.Context, path string) error {
-	return v.checkWithContext(ctx, path, (*BagIt).Validate)
+	return v.checkWithContext(ctx, path, v.validate)
 }
 
 // CheckCompleteness checks path without verifying checksums. It waits for an
@@ -195,7 +196,12 @@ func (v *Validator) TryValidate(path string) error {
 		return err
 	}
 
-	return v.checkWithAcquiredSlot(path, (*BagIt).Validate)
+	return v.checkWithAcquiredSlot(path, v.validate)
+}
+
+func (v *Validator) validate(b *BagIt, path string) error {
+	workers := max(1, runtime.GOMAXPROCS(0)/int(v.poolSize))
+	return b.validate(path, workers)
 }
 
 func (v *Validator) checkWithAcquiredSlot(path string, check func(*BagIt, string) error) error {

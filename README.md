@@ -54,6 +54,10 @@ extracted runtime is cached under the user's cache directory in `bagit-gython`.
 With `WithPoolSize(4)`, a process uses one runtime cache root and up to four
 runner processes for that validator lifecycle.
 
+Full validation hashes files in parallel within each runner. The pool divides
+Go's `GOMAXPROCS` by the configured pool size to budget checksum workers, with
+at least one per runner. Each file is read once for all its checksums.
+
 Runtime cache configuration is explicit:
 
 | Configuration | Result |
